@@ -7,6 +7,7 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import logging
 from django.conf import settings
+import re
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -362,36 +363,42 @@ class ChessNLP:
         }
     
     def analyze_message(self, message, board_fen=None, opening=None):
-        """
-        Analyze a message to determine the user's intent and key topics.
-        Returns a dict with intent and relevant information.
-        """
-        # Normalize text
-        message = message.lower().strip()
-        
-        # Tokenize
-        tokens = word_tokenize(message)
-        
-        # Remove stop words
-        filtered_tokens = [w for w in tokens if w not in self.stop_words]
-        
-        # Identify key topics
-        topics = {}
-        for category, keywords in self.chess_keywords.items():
-            matches = [word for word in filtered_tokens if word in keywords]
-            if matches:
-                topics[category] = matches
-        
-        # Determine primary intent
-        intent = self._determine_intent(message, topics, filtered_tokens)
-        
-        return {
-            'intent': intent,
-            'topics': topics,
-            'tokens': filtered_tokens,
-            'board_fen': board_fen,
-            'opening': opening
-        }
+        # Compose a prompt for Gemini
+        prompt = (
+            "Classify the user's intent as one of: move_analysis, general, greeting, hint, or other.\n"
+            f"User message: '{message}'\n"
+            "Return only the intent."
+        )
+        try:
+            from django.conf import settings
+            from openai import OpenAI
+            client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=getattr(settings, 'OPENAI_API_KEY', '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')
+            )
+            completion = client.chat.completions.create(
+                extra_body={},
+                model="google/gemini-2.0-flash-001",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
+            intent = completion.choices[0].message.content.strip().lower()
+        except Exception as e:
+            print(f"Gemini intent detection failed: {e}")
+            intent = "general"
+
+        # Optionally, extract move UCI if present (using regex)
+        import re
+        match = re.search(r'([a-h][1-8][a-h][1-8][qrbn]?)', message.lower())
+        move_uci = match.group(1) if match else None
+
+        if intent == "move_analysis":
+            return {'intent': 'move_analysis', 'move_uci': move_uci}
+        return {'intent': intent}
     
     def _determine_intent(self, message, topics, tokens):
         """Determine the primary intent of the message."""
@@ -483,6 +490,25 @@ class ChessNLP:
         
         # Default response
         return "I'm your chess trainer. Ask me about the opening, the current position, or for a hint on what to play next."
+
+    def generate_conversational_response(self, message, board_fen=None, opening=None):
+        lowered = message.lower()
+        if "favorite opening" in lowered:
+            return "I really enjoy the Ruy Lopez! Do you have a favorite chess opening?"
+        elif "how are you" in lowered:
+            return "I'm just a chess AI, but I'm always ready to play or chat!"
+        elif "joke" in lowered:
+            return "Why did the chess player bring a ladder? To reach the next level!"
+        elif "improve" in lowered:
+            return "Practice, review your games, and study classic openings! Want tips for your current position?"
+        elif "weather" in lowered:
+            return "I'm not sure, but it's always a good day for chess!"
+        elif "hello" in lowered or "hi" in lowered:
+            return "Hello! Ready to talk chess or just chat?"
+        elif "thank" in lowered:
+            return "You're welcome! Let me know if you want to discuss strategy, analyze a move, or just chat."
+        else:
+            return "That's interesting! Let me know if you want to discuss strategy, analyze a move, or just chat about chess (or anything else)."
 
 class OpeningExplorer:
     """Service for exploring chess openings and generating moves based on opening theory."""

@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/game/<int:game_id>/chat/', views.chat, name='chat'),
     path('api/game/<int:game_id>/reset/', views.reset_game, name='reset_game'),
     path('api/ask_question/', views.ask_question, name='ask_question'),
+    path('api/game/<int:game_id>/move_history/', views.get_move_history, name='get_move_history'),
     
     # Opening Explorer
     path('explorer/', views.opening_explorer, name='opening_explorer'),

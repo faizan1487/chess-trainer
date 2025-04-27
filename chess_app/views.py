@@ -277,24 +277,38 @@ def chat(request, game_id):
     print("Chat request received")
     """API endpoint for chat interaction with the AI."""
     game_obj = get_object_or_404(Game, id=game_id, user=request.user)
-    
-    # Get message from request
-    message = request.POST.get('message', '')
-    
-    # Analyze the message with NLP
+    # Robustly extract message from JSON or form POST
+    if request.content_type == 'application/json':
+        try:
+            data = json.loads(request.body)
+            message = data.get('message', '')
+        except Exception as e:
+            print(f"Error parsing JSON body: {e}")
+            message = ''
+    else:
+        message = request.POST.get('message', '')
+
+    # Use NLP to determine intent
     analysis = chess_nlp.analyze_message(
         message, 
         board_fen=game_obj.fen_position, 
         opening=game_obj.opening
     )
-    
-    # Generate response
-    response = chess_nlp.generate_response(
-        analysis, 
-        stockfish_engine=stockfish_engine,
-        game=game_obj
-    )
-    
+    intent = analysis.get('intent', 'general')
+    print("Intent: ", intent)
+    if intent == 'move_analysis':
+        move_uci = analysis.get('move_uci')
+        if move_uci:
+            eval_score, classification, reason = stockfish_engine.analyze_move(
+                game_obj.fen_position, move_uci
+            )
+            response = f"Move {move_uci}: {reason} (Classification: {classification}, Eval: {eval_score})"
+        else:
+            response = "Please specify a move in UCI format (e.g., e2e4) for analysis."
+    else:
+        # Chess-related but not move analysis: include board_fen
+        response = analyze_question(message, is_general=True)
+
     return JsonResponse({
         'status': 'success',
         'response': response
@@ -442,21 +456,27 @@ def verify_challenge_solution(request, challenge_id):
         'attempts': user_challenge.attempts
     })
 
-def analyze_question(question, board_fen):
+def analyze_question(question, board_fen=None, is_general=False):
     print("analyze_question method called")
-    # Log the received question and FEN
     logger.info(f"Received question: {question}")
     logger.info(f"Board FEN: {board_fen}")
+    print("is_general: ", is_general)
 
-    # Use Gemini for move analysis
     try:
+        if is_general:
+            prompt = f"You are a helpful assistant. The user says: '{question}'. Respond conversationally."
+        else:
+            prompt = (
+                f"You are a chess expert. The user says: '{question}'. "
+                f"The current board FEN is: {board_fen}. Respond helpfully."
+            )
         completion = client.chat.completions.create(
             extra_body={},
             model="google/gemini-2.0-flash-001",
             messages=[
                 {
                     "role": "user",
-                    "content": f"Analyze the move in this position: {board_fen}."
+                    "content": prompt
                 }
             ]
         )
@@ -656,11 +676,9 @@ def update_user_progress(user, opening, move_quality):
         user=user,
         opening=opening
     )
-    
     # Increment games played if it's a new game
     if created:
         progress.games_played = 1
-    
     # Calculate move quality as a percentage 
     quality_scores = {
         'best': 100,
@@ -672,22 +690,33 @@ def update_user_progress(user, opening, move_quality):
         'normal': 60
     }
     move_score = quality_scores.get(move_quality, 60)
-    
     # Update average accuracy with a weighted approach to recent games
     if progress.avg_accuracy == 0:
         progress.avg_accuracy = move_score
     else:
         # Weight recent games more heavily (80% new, 20% old)
         progress.avg_accuracy = (0.8 * move_score) + (0.2 * progress.avg_accuracy)
-    
     # Update best accuracy if this is better
     if move_score > progress.best_accuracy:
         progress.best_accuracy = move_score
-    
     # Calculate mastery level based on accuracy and games played
     # More games played increases mastery, as does higher accuracy
     games_factor = min(progress.games_played / 10, 1.0)  # Caps at 10 games
     progress.mastery_level = int(progress.avg_accuracy * games_factor)
-    
     progress.save()
     return progress
+
+@login_required
+@require_GET
+def get_move_history(request, game_id):
+    game_obj = get_object_or_404(Game, id=game_id, user=request.user)
+    moves = Move.objects.filter(game=game_obj).order_by('move_number')
+    move_list = [
+        {
+            'move_number': m.move_number,
+            'move_san': m.move_san,
+            'player': m.player
+        }
+        for m in moves
+    ]
+    return JsonResponse({'status': 'success', 'moves': move_list})
