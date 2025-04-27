@@ -1,0 +1,245 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block title %}{{ opening.name }} - Opening Explorer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chessboard {
+        width: 100%;
+        max-width: 500px;
+        margin: 0 auto;
+    }
+    .position-card {
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+        cursor: pointer;
+    }
+    .position-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .position-card.active {
+        border-color: #28a745;
+        border-width: 2px;
+    }
+    .position-move {
+        font-weight: bold;
+        color: #007bff;
+    }
+    .critical-position {
+        border-left: 4px solid #dc3545;
+    }
+    .position-annotation {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin-top: 10px;
+    }
+    .progress-container {
+        margin-bottom: 15px;
+    }
+    .progress-label {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'opening_explorer' %}">Opening Explorer</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ opening.name }}</li>
+            </ol>
+        </nav>
+        
+        <h1>{{ opening.name }} <small class="text-muted">{{ opening.eco_code }}</small></h1>
+        
+        <!-- Progress Bar -->
+        {% if progress %}
+        <div class="progress-container">
+            <div class="progress-label">
+                <span>Opening Mastery</span>
+                <span>{{ progress.mastery_level }}%</span>
+            </div>
+            <div class="progress">
+                <div class="progress-bar bg-success" role="progressbar" 
+                     style="width: {{ progress.mastery_level }}%" 
+                     aria-valuenow="{{ progress.mastery_level }}" aria-valuemin="0" aria-valuemax="100">
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="mb-4">
+            <p class="lead">{{ opening.description }}</p>
+            <div class="d-flex mb-3">
+                <span class="badge {% if opening.for_white %}bg-light text-dark{% else %}bg-dark text-white{% endif %} me-2">
+                    Playing as {% if opening.for_white %}White{% else %}Black{% endif %}
+                </span>
+                <span class="badge bg-info me-2">
+                    Difficulty: {{ opening.difficulty }}/5
+                </span>
+                {% if opening.is_popular %}
+                <span class="badge bg-success">
+                    Popular
+                </span>
+                {% endif %}
+            </div>
+            <a href="{% url 'game' opening.id %}" class="btn btn-primary">Train This Opening</a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Chess Board Column -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Interactive Board</h5>
+            </div>
+            <div class="card-body">
+                <div id="explorer-board" class="chessboard"></div>
+                <div class="mt-3 text-center">
+                    <button id="prev-position" class="btn btn-secondary">Previous</button>
+                    <button id="next-position" class="btn btn-primary">Next</button>
+                    <button id="flip-board" class="btn btn-outline-secondary">Flip Board</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Positions Column -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Key Positions</h5>
+            </div>
+            <div class="card-body">
+                <div id="positions-container">
+                    {% for position in positions %}
+                    <div class="card position-card {% if position.is_critical %}critical-position{% endif %}" data-fen="{{ position.fen }}" data-index="{{ forloop.counter0 }}">
+                        <div class="card-body">
+                            <h6 class="card-title">Position {{ forloop.counter }}</h6>
+                            {% if position.move %}
+                            <p class="card-text">
+                                Move: <span class="position-move">{{ position.move }}</span>
+                            </p>
+                            {% else %}
+                            <p class="card-text">
+                                <i>Initial position</i>
+                            </p>
+                            {% endif %}
+                            {% if position.comment %}
+                            <div class="position-annotation">
+                                {{ position.comment }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="alert alert-info">
+                        No detailed positions available for this opening.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Initialize positions array
+        const positions = [
+            {% for position in positions %}
+                {
+                    fen: "{{ position.fen }}",
+                    move: "{{ position.move }}",
+                    comment: "{{ position.comment|escapejs }}"
+                }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ];
+        
+        // Current position index
+        let currentIndex = 0;
+        
+        // Initialize chess board
+        let board = null;
+        
+        // Board configuration
+        const boardConfig = {
+            position: positions.length > 0 ? positions[0].fen : 'start',
+            showNotation: true,
+            draggable: false  // No dragging in explorer mode
+        };
+        
+        // Initialize the board
+        board = Chessboard('explorer-board', boardConfig);
+        
+        // Highlight the first position card
+        $('.position-card[data-index="0"]').addClass('active');
+        
+        // Handle position card click
+        $('.position-card').on('click', function() {
+            const index = $(this).data('index');
+            showPosition(index);
+        });
+        
+        // Previous position button
+        $('#prev-position').on('click', function() {
+            if (currentIndex > 0) {
+                showPosition(currentIndex - 1);
+            }
+        });
+        
+        // Next position button
+        $('#next-position').on('click', function() {
+            if (currentIndex < positions.length - 1) {
+                showPosition(currentIndex + 1);
+            }
+        });
+        
+        // Flip board button
+        $('#flip-board').on('click', function() {
+            board.flip();
+        });
+        
+        // Show a specific position
+        function showPosition(index) {
+            if (index >= 0 && index < positions.length) {
+                currentIndex = index;
+                board.position(positions[index].fen);
+                
+                // Update active card
+                $('.position-card').removeClass('active');
+                $(`.position-card[data-index="${index}"]`).addClass('active');
+                
+                // Scroll to the card
+                const card = $(`.position-card[data-index="${index}"]`);
+                const container = $('#positions-container');
+                container.animate({
+                    scrollTop: card.offset().top - container.offset().top + container.scrollTop()
+                }, 300);
+                
+                // Update button states
+                updateButtonStates();
+            }
+        }
+        
+        // Update button states based on current position
+        function updateButtonStates() {
+            $('#prev-position').prop('disabled', currentIndex === 0);
+            $('#next-position').prop('disabled', currentIndex === positions.length - 1);
+        }
+        
+        // Initial button state update
+        updateButtonStates();
+    });
+</script>
+{% endblock %} 

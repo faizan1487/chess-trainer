@@ -1,0 +1,242 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block title %}Chess Challenges{% endblock %}
+
+{% block extra_css %}
+<style>
+    .challenge-card {
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+    .challenge-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .challenge-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .challenge-difficulty {
+        display: flex;
+        gap: 2px;
+    }
+    .difficulty-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #28a745;
+    }
+    .difficulty-dot.empty {
+        background-color: #e9ecef;
+    }
+    .challenge-solved {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(40, 167, 69, 0.8);
+        color: white;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        transform: rotate(10deg);
+    }
+    .challenge-filter {
+        margin-bottom: 20px;
+    }
+    .difficulty-badge-1 { background-color: #c3e6cb; color: #155724; }
+    .difficulty-badge-2 { background-color: #b8daff; color: #004085; }
+    .difficulty-badge-3 { background-color: #ffeeba; color: #856404; }
+    .difficulty-badge-4 { background-color: #fec107; color: #212529; }
+    .difficulty-badge-5 { background-color: #f5c6cb; color: #721c24; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1>Chess Challenges</h1>
+        <p class="lead">Test your skills with these special chess positions and puzzles</p>
+    </div>
+</div>
+
+<!-- Filter Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card challenge-filter">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="difficulty-filter">Difficulty</label>
+                            <select id="difficulty-filter" class="form-control">
+                                <option value="all">All Difficulties</option>
+                                <option value="1">Beginner</option>
+                                <option value="2">Easy</option>
+                                <option value="3">Intermediate</option>
+                                <option value="4">Advanced</option>
+                                <option value="5">Expert</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="status-filter">Status</label>
+                            <select id="status-filter" class="form-control">
+                                <option value="all">All Challenges</option>
+                                <option value="solved">Solved Only</option>
+                                <option value="unsolved">Unsolved Only</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="sort-filter">Sort By</label>
+                            <select id="sort-filter" class="form-control">
+                                <option value="difficulty">Difficulty (Easy to Hard)</option>
+                                <option value="difficulty-desc">Difficulty (Hard to Easy)</option>
+                                <option value="title">Title (A-Z)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Challenges Grid -->
+<div class="row" id="challenges-container">
+    {% for challenge in challenges %}
+    <div class="col-md-4 challenge-item" 
+         data-difficulty="{{ challenge.difficulty }}" 
+         data-solved="{% if challenge.id in solved_challenges %}true{% else %}false{% endif %}">
+        <div class="card challenge-card">
+            {% if challenge.id in solved_challenges %}
+            <div class="challenge-solved">Solved!</div>
+            {% endif %}
+            
+            <div class="card-header challenge-header">
+                <span class="badge difficulty-badge-{{ challenge.difficulty }}">
+                    {{ challenge.get_difficulty_display }}
+                </span>
+                <div class="challenge-difficulty">
+                    {% for i in "12345" %}
+                        {% if forloop.counter <= challenge.difficulty %}
+                            <div class="difficulty-dot"></div>
+                        {% else %}
+                            <div class="difficulty-dot empty"></div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="card-body">
+                <h5 class="card-title">{{ challenge.title }}</h5>
+                <p class="card-text">{{ challenge.description|truncatechars:150 }}</p>
+                
+                <div class="mb-3">
+                    <span class="badge bg-secondary">{{ challenge.opening.name }}</span>
+                </div>
+                
+                <a href="{% url 'challenge_detail' challenge.id %}" class="btn btn-primary">
+                    {% if challenge.id in solved_challenges %}
+                        Replay Challenge
+                    {% else %}
+                        Try Challenge
+                    {% endif %}
+                </a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="alert alert-info">
+            No challenges available at the moment. Check back soon!
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Filter challenges
+        function filterChallenges() {
+            const difficultyFilter = $('#difficulty-filter').val();
+            const statusFilter = $('#status-filter').val();
+            
+            $('.challenge-item').each(function() {
+                const difficulty = $(this).data('difficulty');
+                const isSolved = $(this).data('solved');
+                
+                let shouldShow = true;
+                
+                // Apply difficulty filter
+                if (difficultyFilter !== 'all' && difficulty != difficultyFilter) {
+                    shouldShow = false;
+                }
+                
+                // Apply status filter
+                if (statusFilter === 'solved' && !isSolved) {
+                    shouldShow = false;
+                } else if (statusFilter === 'unsolved' && isSolved) {
+                    shouldShow = false;
+                }
+                
+                // Show/hide the item
+                if (shouldShow) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+            
+            // Show a message if no challenges are visible
+            if ($('.challenge-item:visible').length === 0) {
+                if ($('#no-results-message').length === 0) {
+                    $('#challenges-container').append(
+                        '<div id="no-results-message" class="col-12">' +
+                        '<div class="alert alert-info">No challenges match your filters.</div>' +
+                        '</div>'
+                    );
+                }
+            } else {
+                $('#no-results-message').remove();
+            }
+        }
+        
+        // Sort challenges
+        function sortChallenges() {
+            const sortBy = $('#sort-filter').val();
+            const container = $('#challenges-container');
+            const challenges = $('.challenge-item').detach().get();
+            
+            challenges.sort(function(a, b) {
+                if (sortBy === 'difficulty') {
+                    return $(a).data('difficulty') - $(b).data('difficulty');
+                } else if (sortBy === 'difficulty-desc') {
+                    return $(b).data('difficulty') - $(a).data('difficulty');
+                } else if (sortBy === 'title') {
+                    const titleA = $(a).find('.card-title').text().toUpperCase();
+                    const titleB = $(b).find('.card-title').text().toUpperCase();
+                    return titleA.localeCompare(titleB);
+                }
+                
+                return 0;
+            });
+            
+            container.append(challenges);
+        }
+        
+        // Attach event handlers
+        $('#difficulty-filter, #status-filter').on('change', filterChallenges);
+        $('#sort-filter').on('change', sortChallenges);
+        
+        // Apply initial sorting
+        sortChallenges();
+    });
+</script>
+{% endblock %} 

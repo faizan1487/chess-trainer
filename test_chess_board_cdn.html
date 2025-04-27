@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chessboard Test (CDN)</title>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <style>
+        #board {
+            width: 400px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chessboard Test (CDN)</h1>
+    <div id="board"></div>
+    <div class="buttons">
+        <button id="startBtn">Start Position</button>
+        <button id="clearBtn">Clear Board</button>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            console.log('Initializing chessboard...');
+            
+            const config = {
+                position: 'start',
+                // Use the CDN url directly
+                pieceTheme: 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/img/chesspieces/wikipedia/{piece}.png',
+                draggable: true
+            };
+            
+            console.log('Using pieceTheme:', config.pieceTheme);
+            
+            // Initialize the board
+            const board = Chessboard('board', config);
+            
+            // Testing functionality
+            $('#startBtn').on('click', function() {
+                board.start();
+            });
+            
+            $('#clearBtn').on('click', function() {
+                board.clear();
+            });
+            
+            // Log any errors
+            window.onerror = function(message, source, lineno, colno, error) {
+                console.error('Error:', message, 'at', source, 'line:', lineno);
+                return false;
+            };
+        });
+    </script>
+</body>
+</html> 

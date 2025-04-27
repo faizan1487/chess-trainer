@@ -1,0 +1,35 @@
+
+api_keys/__pycache__/__init__.cpython-37.pyc
+*.pyc
+
+config/nginx/app.conf
+
+# Generated files
+staticfiles/
+
+# Environment variables
+.env
+.env.development
+.env.production
+
+# Virtual environment
+/myenv/
+/venv/
+/luenv/
+
+# Database dumps
+/dump/
+/navigation_migration_reports/*
+dump.rdb
+
+# Logs
+app.log*
+
+# Tests
+.coverage
+
+# OS generated files
+.DS_Store
+
+# IDE
+*.idea

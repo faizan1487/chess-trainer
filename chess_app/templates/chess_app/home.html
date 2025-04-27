@@ -1,0 +1,48 @@
+{% extends 'chess_app/base.html' %}
+
+{% block title %}Chess Trainer - Improve Your Chess Openings{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 offset-md-3 text-center">
+        <h1 class="display-4 mb-4">Welcome to Chess Trainer</h1>
+        <p class="lead">
+            Master chess openings through interactive training and AI-powered feedback.
+        </p>
+        <hr class="my-4">
+        <p>Choose from a variety of chess openings to practice and improve your game.</p>
+        <div class="mt-5">
+            <a href="{% url 'opening_selection' %}" class="btn btn-primary btn-lg">
+                Start Training
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Interactive Training</h5>
+                <p class="card-text">Practice against an AI that adapts to your skill level and provides real-time feedback.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Opening Mastery</h5>
+                <p class="card-text">Learn and master chess openings with detailed explanations and guided practice.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">AI Analysis</h5>
+                <p class="card-text">Get personalized feedback on your moves and strategies to improve your game.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

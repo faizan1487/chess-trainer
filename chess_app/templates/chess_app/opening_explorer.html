@@ -1,0 +1,229 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block title %}Opening Explorer{% endblock %}
+
+{% block extra_css %}
+<style>
+    .opening-card {
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+    .opening-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .category-title {
+        margin-top: 30px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #f8f9fa;
+        padding-bottom: 10px;
+    }
+    .eco-code {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .opening-difficulty {
+        display: inline-block;
+        margin-left: 10px;
+    }
+    .difficulty-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #28a745;
+        margin-right: 2px;
+    }
+    .difficulty-dot.empty {
+        background-color: #e9ecef;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1>Chess Opening Explorer</h1>
+        <p class="lead">Explore and learn various chess openings to improve your game</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Filter Openings</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="category-filter">Category</label>
+                            <select id="category-filter" class="form-control">
+                                <option value="all">All Categories</option>
+                                {% for category in categories %}
+                                    {% if category %}
+                                    <option value="{{ category }}">{{ category }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="side-filter">Playing As</label>
+                            <select id="side-filter" class="form-control">
+                                <option value="all">All Sides</option>
+                                <option value="white">White</option>
+                                <option value="black">Black</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="difficulty-filter">Difficulty</label>
+                            <select id="difficulty-filter" class="form-control">
+                                <option value="all">All Difficulties</option>
+                                <option value="1">Beginner</option>
+                                <option value="2">Easy</option>
+                                <option value="3">Intermediate</option>
+                                <option value="4">Advanced</option>
+                                <option value="5">Expert</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div id="openings-container">
+            {% regroup openings by category as opening_list %}
+            
+            {% for category_group in opening_list %}
+                <h2 class="category-title" data-category="{{ category_group.grouper|default:'Uncategorized' }}">
+                    {{ category_group.grouper|default:'Uncategorized' }}
+                </h2>
+                
+                <div class="row">
+                    {% for opening in category_group.list %}
+                    <div class="col-md-4 opening-item" 
+                         data-difficulty="{{ opening.difficulty }}"
+                         data-side="{% if opening.for_white %}white{% else %}black{% endif %}">
+                        <div class="card opening-card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>{{ opening.name }}</span>
+                                <span class="eco-code">{{ opening.eco_code }}</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text">{{ opening.description|truncatechars:120 }}</p>
+                                
+                                <div class="mb-2">
+                                    <strong>Difficulty:</strong>
+                                    <span class="opening-difficulty">
+                                        {% for i in "12345" %}
+                                            {% if forloop.counter <= opening.difficulty %}
+                                                <span class="difficulty-dot"></span>
+                                            {% else %}
+                                                <span class="difficulty-dot empty"></span>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </span>
+                                </div>
+                                
+                                <div class="mb-2">
+                                    <strong>Side:</strong> 
+                                    {% if opening.for_white %}
+                                        <span class="badge bg-light text-dark">White</span>
+                                    {% else %}
+                                        <span class="badge bg-dark">Black</span>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="d-flex justify-content-between mt-3">
+                                    <a href="{% url 'opening_explorer_detail' opening.id %}" class="btn btn-outline-primary">
+                                        Explore
+                                    </a>
+                                    <a href="{% url 'game' opening.id %}" class="btn btn-success">
+                                        Train
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Filter functionality
+        function filterOpenings() {
+            const categoryFilter = $('#category-filter').val();
+            const sideFilter = $('#side-filter').val();
+            const difficultyFilter = $('#difficulty-filter').val();
+            
+            // Hide all category titles first
+            $('.category-title').hide();
+            
+            // Show/hide openings based on filters
+            $('.opening-item').each(function() {
+                const item = $(this);
+                const parentCategory = item.closest('.row').prev('.category-title');
+                const difficulty = item.data('difficulty');
+                const side = item.data('side');
+                
+                let shouldShow = true;
+                
+                // Apply category filter
+                if (categoryFilter !== 'all') {
+                    const category = parentCategory.data('category');
+                    if (category !== categoryFilter) {
+                        shouldShow = false;
+                    }
+                }
+                
+                // Apply side filter
+                if (sideFilter !== 'all' && side !== sideFilter) {
+                    shouldShow = false;
+                }
+                
+                // Apply difficulty filter
+                if (difficultyFilter !== 'all' && difficulty != difficultyFilter) {
+                    shouldShow = false;
+                }
+                
+                // Show/hide the item
+                if (shouldShow) {
+                    item.show();
+                    parentCategory.show();
+                } else {
+                    item.hide();
+                }
+            });
+            
+            // Hide empty categories (those with no visible openings)
+            $('.category-title').each(function() {
+                const title = $(this);
+                const visibleOpenings = title.next('.row').find('.opening-item:visible').length;
+                
+                if (visibleOpenings === 0) {
+                    title.hide();
+                }
+            });
+        }
+        
+        // Attach event handlers to filters
+        $('#category-filter, #side-filter, #difficulty-filter').on('change', filterOpenings);
+    });
+</script>
+{% endblock %} 

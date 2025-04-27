@@ -1,0 +1,84 @@
+{% extends 'chess_app/base.html' %}
+
+{% block title %}Select Chess Opening{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1>Select an Opening to Practice</h1>
+        <p class="lead">Choose from the list of chess openings below to begin your training session.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Filter by Difficulty</h5>
+            </div>
+            <div class="card-body">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="difficulty1" checked>
+                    <label class="form-check-label" for="difficulty1">
+                        Beginner (★)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="difficulty2" checked>
+                    <label class="form-check-label" for="difficulty2">
+                        Intermediate (★★)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="difficulty3" checked>
+                    <label class="form-check-label" for="difficulty3">
+                        Advanced (★★★)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="difficulty4" checked>
+                    <label class="form-check-label" for="difficulty4">
+                        Expert (★★★★)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="" id="difficulty5" checked>
+                    <label class="form-check-label" for="difficulty5">
+                        Master (★★★★★)
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-9">
+        <div class="row" id="openings-container">
+            {% for opening in openings %}
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ opening.name }}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">{{ opening.eco_code }}</h6>
+                        <div class="mb-2">
+                            Difficulty: 
+                            {% for i in ""|ljust:opening.difficulty %}★{% endfor %}
+                            {% for i in ""|ljust:5|slice:opening.difficulty %}☆{% endfor %}
+                        </div>
+                        <p class="card-text">{{ opening.description|truncatewords:30 }}</p>
+                    </div>
+                    <div class="card-footer">
+                        <a href="{% url 'game' opening.id %}" class="btn btn-primary">Start Training</a>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                <div class="alert alert-info">
+                    No openings available. Please check back later.
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

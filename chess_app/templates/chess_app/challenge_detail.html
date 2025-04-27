@@ -1,0 +1,443 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block title %}Chess Challenge: {{ challenge.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chessboard {
+        width: 100%;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    .challenge-info {
+        margin-bottom: 20px;
+    }
+    .move-input {
+        margin-top: 20px;
+    }
+    .timer {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin: 15px 0;
+    }
+    .move-history {
+        height: 300px;
+        overflow-y: auto;
+    }
+    .move-row {
+        display: flex;
+        margin-bottom: 5px;
+    }
+    .move-number {
+        width: 30px;
+        font-weight: bold;
+    }
+    .white-move, .black-move {
+        flex: 1;
+        padding: 0 5px;
+    }
+    .white-move {
+        background-color: #f8f9fa;
+    }
+    .black-move {
+        background-color: #e9ecef;
+    }
+    .message-container {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 5px;
+        display: none;
+    }
+    .message-success {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+    }
+    .message-error {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+    }
+    .difficulty-easy {
+        background-color: #28a745;
+    }
+    .difficulty-medium {
+        background-color: #ffc107;
+    }
+    .difficulty-hard {
+        background-color: #dc3545;
+    }
+    .solution-container {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background-color: #f8f9fa;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1>{{ challenge.title }}</h1>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Chess Board Column -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Challenge Board</h5>
+            </div>
+            <div class="card-body">
+                <div id="challenge-board" class="chessboard"></div>
+                <div class="mt-3 text-center">
+                    <button id="flip-board" class="btn btn-secondary">Flip Board</button>
+                    <button id="reset-challenge" class="btn btn-warning">Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Challenge Info & Move Input Column -->
+    <div class="col-md-6">
+        <!-- Challenge Info -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Challenge Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="challenge-info">
+                    <p>{{ challenge.description }}</p>
+                    <div class="d-flex justify-content-between">
+                        <span>
+                            <strong>Difficulty:</strong> 
+                            <span class="badge {% if challenge.difficulty == 'easy' %}bg-success{% elif challenge.difficulty == 'medium' %}bg-warning{% else %}bg-danger{% endif %}">
+                                {{ challenge.difficulty|title }}
+                            </span>
+                        </span>
+                        <span>
+                            <strong>Attempts:</strong> 
+                            <span class="badge bg-info">{{ user_attempts|default:"0" }}</span>
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- Timer -->
+                <div class="timer text-center" id="timer">00:00</div>
+                
+                <!-- User Move Input -->
+                <div class="move-input">
+                    <form id="move-form">
+                        <div class="input-group mb-3">
+                            <input type="text" id="move-input" class="form-control" placeholder="Enter your move (e.g., 'e4' or 'Nf3')">
+                            <button class="btn btn-primary" type="submit" id="submit-move">Submit</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Message Container -->
+                <div id="message-container" class="message-container"></div>
+                
+                <!-- Show Solution Button (only visible after attempts) -->
+                {% if user_attempts and user_attempts > 2 %}
+                <div class="text-center mt-3">
+                    <button id="show-solution" class="btn btn-outline-secondary">Show Solution</button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Move History -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Move History</h5>
+            </div>
+            <div class="card-body">
+                <div id="move-history" class="move-history">
+                    <!-- Move history will be populated here -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Solution Container (Hidden by default) -->
+        <div id="solution-container" class="solution-container">
+            <h5>Solution</h5>
+            <div id="solution-content">
+                {% if is_solved %}
+                <p>{{ challenge.solution }}</p>
+                {% else %}
+                <p>Try to solve the challenge first! The solution will be available after multiple attempts.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Challenge data from server
+        const challengeId = {{ challenge.id }};
+        const initialFen = "{{ challenge.fen_position }}";
+        const playerColor = "{{ player_color }}";
+        const startTime = new Date().getTime();
+        let timerInterval;
+        let gameOver = false;
+        
+        // Initialize game state
+        let board = null;
+        let game = new Chess(initialFen);
+        
+        // Board configuration with CDN path for pieces instead of local static files
+        const config = {
+            position: initialFen,
+            draggable: true,
+            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+            orientation: playerColor,
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd
+        };
+        
+        // Initialize the board
+        board = Chessboard('challenge-board', config);
+        
+        // Start the timer
+        startTimer();
+        
+        // Handle piece drag start
+        function onDragStart(source, piece) {
+            // Don't allow dragging if the game is over
+            if (game.game_over() || gameOver) return false;
+            
+            // Only allow the current player to move pieces
+            const turn = game.turn() === 'w' ? 'white' : 'black';
+            if ((playerColor === 'white' && piece.search(/^b/) !== -1) ||
+                (playerColor === 'black' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+            
+            // Only allow user to move if it's their turn
+            if (turn !== playerColor) {
+                return false;
+            }
+        }
+        
+        // Handle piece drop
+        function onDrop(source, target) {
+            // Check if the move is legal
+            let move = null;
+            try {
+                move = game.move({
+                    from: source,
+                    to: target,
+                    promotion: 'q' // Always promote to queen for simplicity
+                });
+            } catch (error) {
+                console.error("Error making move:", error);
+            }
+            
+            // If move is illegal, return piece to source
+            if (move === null) return 'snapback';
+            
+            // Valid move - send to server
+            sendMoveToServer(move);
+        }
+        
+        // Update board after piece snap
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+        
+        // Start the timer
+        function startTimer() {
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+        
+        // Update the timer display
+        function updateTimer() {
+            if (gameOver) {
+                clearInterval(timerInterval);
+                return;
+            }
+            
+            const currentTime = new Date().getTime();
+            const elapsedTime = Math.floor((currentTime - startTime) / 1000);
+            const minutes = Math.floor(elapsedTime / 60);
+            const seconds = elapsedTime % 60;
+            
+            $('#timer').text(
+                (minutes < 10 ? '0' : '') + minutes + ':' + 
+                (seconds < 10 ? '0' : '') + seconds
+            );
+        }
+        
+        // Send the user's move to the server
+        function sendMoveToServer(move) {
+            const moveData = {
+                move_uci: move.from + move.to + (move.promotion || ''),
+                move_san: move.san,
+                position_after: game.fen()
+            };
+            
+            $.ajax({
+                url: '/api/check_challenge_move/' + challengeId + '/',
+                type: 'POST',
+                data: moveData,
+                success: function(data) {
+                    // Update move history
+                    updateMoveHistory();
+                    
+                    if (data.is_correct) {
+                        // Correct move
+                        showMessage('Correct move! ' + (data.message || ''), 'success');
+                        
+                        // Make opponent's move if provided
+                        if (data.opponent_move) {
+                            setTimeout(function() {
+                                try {
+                                    const opponentMove = game.move(data.opponent_move);
+                                    board.position(game.fen());
+                                    updateMoveHistory();
+                                } catch (error) {
+                                    console.error("Error applying opponent move:", error);
+                                }
+                            }, 500);
+                        }
+                        
+                        // Check if challenge completed
+                        if (data.challenge_completed) {
+                            gameOver = true;
+                            clearInterval(timerInterval);
+                            showMessage('Challenge completed! ' + (data.completion_message || ''), 'success');
+                            
+                            // Show solution if challenge is solved
+                            $('#solution-container').show();
+                            $('#solution-content').html('<p>' + data.solution + '</p>');
+                        }
+                    } else {
+                        // Incorrect move
+                        showMessage('Incorrect move. ' + (data.message || ''), 'error');
+                        
+                        // Undo the move if requested
+                        if (data.reset_position) {
+                            game.undo();
+                            board.position(game.fen());
+                        }
+                    }
+                },
+                error: function(error) {
+                    console.error("Error sending move:", error);
+                    showMessage('Error checking move. Please try again.', 'error');
+                    game.undo();
+                    board.position(game.fen());
+                }
+            });
+        }
+        
+        // Show a message in the message container
+        function showMessage(message, type) {
+            const messageContainer = $('#message-container');
+            messageContainer.removeClass('message-success message-error');
+            messageContainer.addClass('message-' + type);
+            messageContainer.html(message);
+            messageContainer.slideDown();
+            
+            // Hide message after 5 seconds
+            setTimeout(function() {
+                messageContainer.slideUp();
+            }, 5000);
+        }
+        
+        // Update the move history display
+        function updateMoveHistory() {
+            const history = game.history({verbose: true});
+            const moveHistory = $('#move-history');
+            moveHistory.empty();
+            
+            let currentRow = null;
+            let moveNumber = 0;
+            
+            history.forEach((move, index) => {
+                if (index % 2 === 0) {
+                    moveNumber = Math.floor(index / 2) + 1;
+                    currentRow = $('<div class="move-row"></div>');
+                    currentRow.append(`<div class="move-number">${moveNumber}.</div>`);
+                    currentRow.append(`<div class="white-move">${game.history()[index]}</div>`);
+                    
+                    // Add placeholder for black move
+                    if (index + 1 >= history.length) {
+                        currentRow.append('<div class="black-move"></div>');
+                    }
+                    
+                    moveHistory.append(currentRow);
+                } else {
+                    // Black's move
+                    currentRow.find('.black-move').text(game.history()[index]);
+                }
+            });
+            
+            // Scroll to bottom of move history
+            moveHistory.scrollTop(moveHistory[0].scrollHeight);
+        }
+        
+        // Handle form submission for manual move input
+        $('#move-form').submit(function(e) {
+            e.preventDefault();
+            
+            const moveInput = $('#move-input').val().trim();
+            if (!moveInput) return;
+            
+            // Try to make the move
+            try {
+                const move = game.move(moveInput);
+                if (move) {
+                    board.position(game.fen());
+                    sendMoveToServer(move);
+                    $('#move-input').val('');
+                }
+            } catch (error) {
+                console.error("Invalid move:", error);
+                showMessage('Invalid move. Please try again.', 'error');
+            }
+        });
+        
+        // Handle flip board button
+        $('#flip-board').click(function() {
+            board.flip();
+        });
+        
+        // Handle reset challenge button
+        $('#reset-challenge').click(function() {
+            if (confirm('Are you sure you want to reset the challenge?')) {
+                game = new Chess(initialFen);
+                board.position(initialFen);
+                $('#move-history').empty();
+                $('#message-container').hide();
+                
+                // Reset timer
+                clearInterval(timerInterval);
+                gameOver = false;
+                startTime = new Date().getTime();
+                startTimer();
+            }
+        });
+        
+        // Handle show solution button
+        $('#show-solution').click(function() {
+            $('#solution-container').toggle();
+        });
+        
+        // Resize board on window resize
+        $(window).resize(function() {
+            board.resize();
+        });
+    });
+</script>
+{% endblock %} 
