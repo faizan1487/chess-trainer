@@ -178,6 +178,7 @@
             transform: scale(1.2);
         }
     }
+    .move-label.badge { margin-left: 8px; margin-right: 8px; font-size: 0.85em; }
 </style>
 {% endblock %}
 
@@ -491,34 +492,27 @@
         
         // Update the move history display
         function updateMoveHistory() {
-            const history = game.history({verbose: true});
-            const moveHistory = $('#move-history');
-            moveHistory.empty();
-            
-            let currentRow = null;
-            let moveNumber = 0;
-            
-            history.forEach((move, index) => {
-                if (index % 2 === 0) {
-                    moveNumber = Math.floor(index / 2) + 1;
-                    currentRow = $('<div class="move-row"></div>');
-                    currentRow.append(`<div class="move-number">${moveNumber}.</div>`);
-                    currentRow.append(`<div class="white-move">${game.history()[index]}</div>`);
-                    
-                    // Add placeholder for black move
-                    if (index + 1 >= history.length) {
-                        currentRow.append('<div class="black-move"></div>');
+            $.ajax({
+                url: '/api/game/' + gameId + '/move_history/',
+                type: 'GET',
+                success: function(data) {
+                    const moveHistory = $('#move-history');
+                    moveHistory.empty();
+                    if (data.status === 'success') {
+                        data.moves.forEach(function(move) {
+                            const label = move.player === 'user' ? 'User' : 'AI';
+                            const badgeClass = label === 'User' ? 'bg-primary' : 'bg-secondary';
+                            moveHistory.append(
+                                `<div class="move-row">
+                                    <span class="move-number">${move.move_number}.</span>
+                                    <span class="move-label badge ${badgeClass}">${label}</span>
+                                    <span class="move-san">${move.move_san}</span>
+                                </div>`
+                            );
+                        });
                     }
-                    
-                    moveHistory.append(currentRow);
-                } else {
-                    // Black's move
-                    currentRow.find('.black-move').text(game.history()[index]);
                 }
             });
-            
-            // Scroll to bottom of move history
-            moveHistory.scrollTop(moveHistory[0].scrollHeight);
         }
         
         // Handle flip board button
@@ -612,8 +606,9 @@
             const message = $('#chat-input').val().trim();
             if (message === '') return;
 
-            const endpoint = '/api/ask_question/';
-            const payload = { message, fen: game.fen() };
+            // Use the correct chat endpoint
+            const endpoint = '/api/game/' + gameId + '/chat/';
+            const payload = { message: message };
 
             console.log('Sending request to:', endpoint);
             console.log('Payload:', payload);
