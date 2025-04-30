@@ -363,9 +363,10 @@ class ChessNLP:
         }
     
     def analyze_message(self, message, board_fen=None, opening=None):
+        print("analyze message called")
         # Compose a prompt for Gemini
         prompt = (
-            "Classify the user's intent as one of: move_analysis, general, greeting, hint, or other.\n"
+            "Classify the user's intent as one of: opening_info, move_analysis, general, greeting, hint, or other.\n"
             f"User message: '{message}'\n"
             "Return only the intent."
         )
@@ -391,13 +392,29 @@ class ChessNLP:
             print(f"Gemini intent detection failed: {e}")
             intent = "general"
 
-        # Optionally, extract move UCI if present (using regex)
-        import re
-        match = re.search(r'([a-h][1-8][a-h][1-8][qrbn]?)', message.lower())
-        move_uci = match.group(1) if match else None
+        # Extract move UCI using multiple patterns
+        move_uci = None
+        # Try to find UCI format (e2e4, g1f3, etc.)
+        uci_match = re.search(r'([a-h][1-8][a-h][1-8][qrbn]?)', message.lower())
+        if uci_match:
+            move_uci = uci_match.group(1)
+        else:
+            # Try to find SAN format (e4, Nf3, O-O, etc.)
+            san_match = re.search(r'\b([KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?|O-O(?:-O)?)\b', message)
+            if san_match and board_fen:
+                try:
+                    board = chess.Board(board_fen)
+                    move = board.parse_san(san_match.group(1))
+                    move_uci = move.uci()
+                except ValueError:
+                    pass
 
-        if intent == "move_analysis":
+        print("move", move_uci)
+        if intent == "move_analysis" and move_uci:
             return {'intent': 'move_analysis', 'move_uci': move_uci}
+        elif intent == "opening_info":
+            return {'intent': 'opening_info'}
+        print("returning intent")
         return {'intent': intent}
     
     def _determine_intent(self, message, topics, tokens):
