@@ -277,37 +277,25 @@ def chat(request, game_id):
     print("Chat request received")
     """API endpoint for chat interaction with the AI."""
     game_obj = get_object_or_404(Game, id=game_id, user=request.user)
-    # Robustly extract message from JSON or form POST
+    
+    # Robustly extract message and FEN from JSON or form POST
     if request.content_type == 'application/json':
         try:
             data = json.loads(request.body)
             message = data.get('message', '')
+            board_fen = data.get('fen', game_obj.fen_position)  # Use game's FEN if not provided
+            print("fen in try", board_fen)
         except Exception as e:
             print(f"Error parsing JSON body: {e}")
             message = ''
+            board_fen = game_obj.fen_position
+            print("fen in except", board_fen)
     else:
         message = request.POST.get('message', '')
+        board_fen = request.POST.get('fen', game_obj.fen_position)
+        print("fen in else", board_fen)
 
-    # Use NLP to determine intent
-    analysis = chess_nlp.analyze_message(
-        message, 
-        board_fen=game_obj.fen_position, 
-        opening=game_obj.opening
-    )
-    intent = analysis.get('intent', 'general')
-    print("Intent: ", intent)
-    if intent == 'move_analysis':
-        move_uci = analysis.get('move_uci')
-        if move_uci:
-            eval_score, classification, reason = stockfish_engine.analyze_move(
-                game_obj.fen_position, move_uci
-            )
-            response = f"Move {move_uci}: {reason} (Classification: {classification}, Eval: {eval_score})"
-        else:
-            response = "Please specify a move in UCI format (e.g., e2e4) for analysis."
-    else:
-        # Chess-related but not move analysis: include board_fen
-        response = analyze_question(message, is_general=True)
+    response = analyze_question(message, board_fen)
 
     return JsonResponse({
         'status': 'success',
@@ -456,20 +444,17 @@ def verify_challenge_solution(request, challenge_id):
         'attempts': user_challenge.attempts
     })
 
-def analyze_question(question, board_fen=None, is_general=False):
+def analyze_question(question, board_fen=None):
     print("analyze_question method called")
     logger.info(f"Received question: {question}")
     logger.info(f"Board FEN: {board_fen}")
-    print("is_general: ", is_general)
 
     try:
-        if is_general:
-            prompt = f"You are a helpful assistant. The user says: '{question}'. Respond conversationally."
-        else:
-            prompt = (
-                f"You are a chess expert. The user says: '{question}'. "
-                f"The current board FEN is: {board_fen}. Respond helpfully."
-            )
+        prompt = (
+            f"You are a chess expert. The user asks: '{question}'. Analyze the user's question carefully and respond accordingly."
+            f" If the question is not related to the board position, do not reference the FEN. If relevant, the current board FEN is: {board_fen}."
+            f" Provide a helpful and insightful answer."
+        )
         completion = client.chat.completions.create(
             extra_body={},
             model="google/gemini-2.0-flash-001",
