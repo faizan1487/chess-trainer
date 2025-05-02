@@ -75,6 +75,30 @@
         align-self: flex-start;
         text-align: left;
         margin-right: auto;
+        line-height: 1.5;
+    }
+    .ai-message p {
+        margin-bottom: 0.7em;
+    }
+    .ai-message ul, .ai-message ol {
+        padding-left: 20px;
+        margin-bottom: 0.7em;
+    }
+    .ai-message h3, .ai-message h4, .ai-message h2 {
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+        font-weight: bold;
+    }
+    .ai-message h3 {
+        font-size: 1.1em;
+        color: #1976d2;
+    }
+    .ai-message li {
+        margin-bottom: 0.3em;
+    }
+    .ai-message hr {
+        margin: 0.8em 0;
+        border-color: #bbdefb;
     }
     .user-message {
         background-color: #c8e6c9;
@@ -589,10 +613,84 @@
             });
         });
         
+        // Helper to format markdown-like AI responses
         function formatAIResponse(response) {
-            // Example formatting logic
-            return response.replace(/\*/g, '').replace(/\n/g, '<br>');
+            // First, let's clean the input by trimming extra spaces/lines
+            let formatted = response.trim();
+            
+            // Escape any HTML that might already be in the response
+            function escapeHTML(text) {
+                return text
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+            }
+            
+            formatted = escapeHTML(formatted);
+            
+            // Convert markdown headings
+            formatted = formatted.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+            formatted = formatted.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+            formatted = formatted.replace(/^# (.*?)$/gm, '<h2>$1</h2>');
+            
+            // Convert bold text
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            formatted = formatted.replace(/__(.*?)__/g, '<strong>$1</strong>');
+            
+            // Convert italics
+            formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            formatted = formatted.replace(/_(.*?)_/g, '<em>$1</em>');
+            
+            // Convert horizontal rules
+            formatted = formatted.replace(/^---+$/gm, '<hr>');
+            
+            // Handle ordered lists
+            const orderedListRegex = /^(\d+\.\s+.*(?:\n(?!\n|\d+\.|\*\s+).*)*)+/gm;
+            formatted = formatted.replace(orderedListRegex, match => {
+                const items = match.split(/\n(?=\d+\.\s+)/);
+                const listItems = items.map(item => {
+                    return `<li>${item.replace(/^\d+\.\s+/, '')}</li>`;
+                }).join('');
+                return `<ol>${listItems}</ol>`;
+            });
+            
+            // Handle unordered lists
+            const unorderedListRegex = /^(\*\s+.*(?:\n(?!\n|\d+\.|\*\s+).*)*)+/gm;
+            formatted = formatted.replace(unorderedListRegex, match => {
+                const items = match.split(/\n(?=\*\s+)/);
+                const listItems = items.map(item => {
+                    return `<li>${item.replace(/^\*\s+/, '')}</li>`;
+                }).join('');
+                return `<ul>${listItems}</ul>`;
+            });
+            
+            // Convert paragraphs (double newlines)
+            formatted = formatted.split(/\n\n+/).map(p => 
+                p.trim().startsWith('<') ? p : `<p>${p}</p>`
+            ).join('');
+            
+            // Convert single newlines to <br> (but not inside block elements)
+            formatted = formatted.replace(
+                /(?<!<\/?(?:h\d|ol|ul|li|p|div|blockquote)>[\s\n]*)\n(?![\s\n]*<\/?(?:h\d|ol|ul|li|p|div|blockquote)>)/g, 
+                '<br>'
+            );
+            
+            return formatted;
         }
+
+        // Optionally, add CSS for <hr> and strong in .ai-message
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .ai-message hr {
+                border: none;
+                border-top: 1px solid #bbb;
+                margin: 8px 0;
+            }
+            .ai-message strong {
+                color: #1976d2;
+            }
+        `;
+        document.head.appendChild(style);
 
         // Initialize conversation history
         let conversationHistory = [];
@@ -645,11 +743,15 @@
             const chatMessages = document.getElementById('chat-messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = chatClass;
-            messageDiv.textContent = content;
-            
+
+            // Format the AI response for readability
+            if (role === 'assistant') {
+                messageDiv.innerHTML = formatAIResponse(content);
+            } else {
+                messageDiv.textContent = content;
+            }
+
             chatMessages.appendChild(messageDiv);
-            
-            // Scroll to bottom
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
