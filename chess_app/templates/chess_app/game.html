@@ -594,49 +594,76 @@
             return response.replace(/\*/g, '').replace(/\n/g, '<br>');
         }
 
-        // Handle chat input
+        // Initialize conversation history
+        let conversationHistory = [];
+
+        // Function to send message to chat
+        async function sendMessage() {
+            const messageInput = document.getElementById('chat-input');
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessageToChat('user', message);
+            messageInput.value = '';
+
+            try {
+                console.log('Sending request with history:', conversationHistory);
+                const response = await fetch(`/api/game/${gameId}/chat/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        fen: game.fen(),
+                        history: conversationHistory
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // Add AI response to chat
+                    addMessageToChat('assistant', data.response);
+                    
+                    // Update conversation history
+                    conversationHistory = data.history;
+                    console.log('Updated conversation history:', conversationHistory);
+                } else {
+                    addMessageToChat('assistant', 'Error: Could not process your message.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToChat('assistant', 'Error: Could not connect to the server.');
+            }
+        }
+
+        // Function to add message to chat
+        function addMessageToChat(role, content) {
+            const chatClass = role === 'user' ? 'user-message' : 'ai-message';
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = chatClass;
+            messageDiv.textContent = content;
+            
+            chatMessages.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Add event listeners for chat
         $('#chat-input').keypress(function(event) {
             if (event.which === 13) { // Enter key
                 event.preventDefault();
-                $('#send-message').click();
+                sendMessage();
             }
         });
 
-        $('#send-message').click(function() {
-            const message = $('#chat-input').val().trim();
-            if (message === '') return;
+        $('#send-message').click(sendMessage);
 
-            // Use the correct chat endpoint
-            const endpoint = '/api/game/' + gameId + '/chat/';
-            const payload = { message: message };
-
-            console.log('Sending request to:', endpoint);
-            console.log('Payload:', payload);
-
-            // Display user message
-            const chat = $('#chat-messages');
-            const userMessageDiv = $('<div class="user-message">').text(message);
-            chat.append(userMessageDiv);
-
-            // Clear input field
-            $('#chat-input').val('');
-
-            fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken'),
-                },
-                body: JSON.stringify(payload),
-            })
-            .then(response => response.json())
-            .then(data => {
-                const aiMessageDiv = $('<div class="ai-message">').html(formatAIResponse(data.response));
-                chat.append(aiMessageDiv);
-                chat.scrollTop(chat[0].scrollHeight);
-            });
-        });
-
+        // Function to get CSRF token
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {
