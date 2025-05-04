@@ -33,3 +33,4 @@ app.log*
 
 # IDE
 *.idea
+db.sqlite3
