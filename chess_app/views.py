@@ -283,23 +283,35 @@ def chat(request, game_id):
         try:
             data = json.loads(request.body)
             message = data.get('message', '')
-            board_fen = data.get('fen', game_obj.fen_position)  # Use game's FEN if not provided
-            print("fen in try", board_fen)
+            board_fen = data.get('fen', game_obj.fen_position)
+            conversation_history = data.get('history', [])  # Get conversation history
+            # print("fen in try", board_fen)
+            # print("conversation history:", conversation_history)
         except Exception as e:
             print(f"Error parsing JSON body: {e}")
             message = ''
             board_fen = game_obj.fen_position
+            conversation_history = []
             print("fen in except", board_fen)
     else:
         message = request.POST.get('message', '')
         board_fen = request.POST.get('fen', game_obj.fen_position)
+        conversation_history = request.POST.get('history', [])
         print("fen in else", board_fen)
 
-    response = analyze_question(message, board_fen)
+    # Add the new message to the conversation history
+    conversation_history.append({"role": "user", "content": message})
+
+    # Generate response with context
+    response = analyze_question(message, board_fen, conversation_history)
+
+    # Add the AI's response to the conversation history
+    conversation_history.append({"role": "assistant", "content": response})
 
     return JsonResponse({
         'status': 'success',
-        'response': response
+        'response': response,
+        'history': conversation_history  # Return updated history
     })
 
 @login_required
@@ -444,20 +456,39 @@ def verify_challenge_solution(request, challenge_id):
         'attempts': user_challenge.attempts
     })
 
-def analyze_question(question, board_fen=None):
+def analyze_question(question, board_fen=None, conversation_history=None):
     print("analyze_question method called")
-    logger.info(f"Received question: {question}")
-    logger.info(f"Board FEN: {board_fen}")
-
+    # logger.info(f"Received question: {question}")
+    # logger.info(f"Board FEN: {board_fen}")
+    # logger.info(f"Conversation history: {conversation_history}")
+    
     try:
+        # Prepare the conversation context
+        context = ""
+        if conversation_history:
+            context = "Previous conversation:\n"
+            for msg in conversation_history:
+                role = "User" if msg["role"] == "user" else "Assistant"
+                context += f"{role}: {msg['content']}\n"
+            context += "\nCurrent question:\n"
+
         prompt = (
-            f"You are a chess expert. The user asks: '{question}'. Analyze the user's question carefully and respond accordingly."
-            f" If the question is not related to the board position, do not reference the FEN. If relevant, the current board FEN is: {board_fen}."
-            f" Provide a helpful and insightful answer."
+            f"You are a highly skilled chess expert with extensive knowledge of chess strategy, tactics, and board dynamics. "
+            f"You are currently being used as a chat agent in the backend for an agentic chess application designed to help users improve their openings. "
+            f"{context}"
+            f"The user asks: '{question}'. Carefully analyze the user's question, considering the context and nuances, and respond with a clear and insightful answer. "
+            "If the question is not related to the current board position or does not require a strategic recommendation, avoid referencing the FEN. "
+            "However, if the user asks about what move to make next, what action to take, or what strategy to adopt based on the current position, do not mention the FEN directly. "
+            "Focus on understanding the user's intent and providing a response that is not only accurate but also actionable. "
+            "Provide guidance that could improve the user's chess game, whether it's through suggesting the best move, explaining a strategy, or offering advice on improving play. "
+            "Your answer should be structured, well thought-out, and tailored to the user's level of experience, aiming to help them understand both the move and the reasoning behind it. "
+            "If the question is open-ended or vague, ask for further clarification to ensure you provide the most relevant and helpful response. "
+            f"This is the current board state: {board_fen}"
         )
+
         completion = client.chat.completions.create(
             extra_body={},
-            model="google/gemini-2.0-flash-001",
+            model="tngtech/deepseek-r1t-chimera:free",
             messages=[
                 {
                     "role": "user",
@@ -465,9 +496,12 @@ def analyze_question(question, board_fen=None):
                 }
             ]
         )
-        gemini_response = completion.choices[0].message.content
-        logger.info(f"Gemini response: {gemini_response}")
-        return gemini_response
+        print("completion", completion)
+        
+        # Extract the final response from the completion
+        raw_response = completion.choices[0].message.content
+
+        return raw_response
     except Exception as e:
         logger.error(f"Error with Gemini API: {e}")
         return "Error processing your request. Please try again later."

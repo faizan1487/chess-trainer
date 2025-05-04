@@ -75,6 +75,30 @@
         align-self: flex-start;
         text-align: left;
         margin-right: auto;
+        line-height: 1.5;
+    }
+    .ai-message p {
+        margin-bottom: 0.7em;
+    }
+    .ai-message ul, .ai-message ol {
+        padding-left: 20px;
+        margin-bottom: 0.7em;
+    }
+    .ai-message h3, .ai-message h4, .ai-message h2 {
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+        font-weight: bold;
+    }
+    .ai-message h3 {
+        font-size: 1.1em;
+        color: #1976d2;
+    }
+    .ai-message li {
+        margin-bottom: 0.3em;
+    }
+    .ai-message hr {
+        margin: 0.8em 0;
+        border-color: #bbdefb;
     }
     .user-message {
         background-color: #c8e6c9;
@@ -589,54 +613,159 @@
             });
         });
         
+        // Helper to format markdown-like AI responses
         function formatAIResponse(response) {
-            // Example formatting logic
-            return response.replace(/\*/g, '').replace(/\n/g, '<br>');
+            // First, let's clean the input by trimming extra spaces/lines
+            let formatted = response.trim();
+            
+            // Escape any HTML that might already be in the response
+            function escapeHTML(text) {
+                return text
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+            }
+            
+            formatted = escapeHTML(formatted);
+            
+            // Convert markdown headings
+            formatted = formatted.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
+            formatted = formatted.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
+            formatted = formatted.replace(/^# (.*?)$/gm, '<h2>$1</h2>');
+            
+            // Convert bold text
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            formatted = formatted.replace(/__(.*?)__/g, '<strong>$1</strong>');
+            
+            // Convert italics
+            formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            formatted = formatted.replace(/_(.*?)_/g, '<em>$1</em>');
+            
+            // Convert horizontal rules
+            formatted = formatted.replace(/^---+$/gm, '<hr>');
+            
+            // Handle ordered lists
+            const orderedListRegex = /^(\d+\.\s+.*(?:\n(?!\n|\d+\.|\*\s+).*)*)+/gm;
+            formatted = formatted.replace(orderedListRegex, match => {
+                const items = match.split(/\n(?=\d+\.\s+)/);
+                const listItems = items.map(item => {
+                    return `<li>${item.replace(/^\d+\.\s+/, '')}</li>`;
+                }).join('');
+                return `<ol>${listItems}</ol>`;
+            });
+            
+            // Handle unordered lists
+            const unorderedListRegex = /^(\*\s+.*(?:\n(?!\n|\d+\.|\*\s+).*)*)+/gm;
+            formatted = formatted.replace(unorderedListRegex, match => {
+                const items = match.split(/\n(?=\*\s+)/);
+                const listItems = items.map(item => {
+                    return `<li>${item.replace(/^\*\s+/, '')}</li>`;
+                }).join('');
+                return `<ul>${listItems}</ul>`;
+            });
+            
+            // Convert paragraphs (double newlines)
+            formatted = formatted.split(/\n\n+/).map(p => 
+                p.trim().startsWith('<') ? p : `<p>${p}</p>`
+            ).join('');
+            
+            // Convert single newlines to <br> (but not inside block elements)
+            formatted = formatted.replace(
+                /(?<!<\/?(?:h\d|ol|ul|li|p|div|blockquote)>[\s\n]*)\n(?![\s\n]*<\/?(?:h\d|ol|ul|li|p|div|blockquote)>)/g, 
+                '<br>'
+            );
+            
+            return formatted;
         }
 
-        // Handle chat input
+        // Optionally, add CSS for <hr> and strong in .ai-message
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .ai-message hr {
+                border: none;
+                border-top: 1px solid #bbb;
+                margin: 8px 0;
+            }
+            .ai-message strong {
+                color: #1976d2;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Initialize conversation history
+        let conversationHistory = [];
+
+        // Function to send message to chat
+        async function sendMessage() {
+            const messageInput = document.getElementById('chat-input');
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessageToChat('user', message);
+            messageInput.value = '';
+
+            try {
+                console.log('Sending request with history:', conversationHistory);
+                const response = await fetch(`/api/game/${gameId}/chat/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        fen: game.fen(),
+                        history: conversationHistory
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // Add AI response to chat
+                    addMessageToChat('assistant', data.response);
+                    
+                    // Update conversation history
+                    conversationHistory = data.history;
+                    console.log('Updated conversation history:', conversationHistory);
+                } else {
+                    addMessageToChat('assistant', 'Error: Could not process your message.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToChat('assistant', 'Error: Could not connect to the server.');
+            }
+        }
+
+        // Function to add message to chat
+        function addMessageToChat(role, content) {
+            const chatClass = role === 'user' ? 'user-message' : 'ai-message';
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = chatClass;
+
+            // Format the AI response for readability
+            if (role === 'assistant') {
+                messageDiv.innerHTML = formatAIResponse(content);
+            } else {
+                messageDiv.textContent = content;
+            }
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Add event listeners for chat
         $('#chat-input').keypress(function(event) {
             if (event.which === 13) { // Enter key
                 event.preventDefault();
-                $('#send-message').click();
+                sendMessage();
             }
         });
 
-        $('#send-message').click(function() {
-            const message = $('#chat-input').val().trim();
-            if (message === '') return;
+        $('#send-message').click(sendMessage);
 
-            // Use the correct chat endpoint
-            const endpoint = '/api/game/' + gameId + '/chat/';
-            const payload = { message: message };
-
-            console.log('Sending request to:', endpoint);
-            console.log('Payload:', payload);
-
-            // Display user message
-            const chat = $('#chat-messages');
-            const userMessageDiv = $('<div class="user-message">').text(message);
-            chat.append(userMessageDiv);
-
-            // Clear input field
-            $('#chat-input').val('');
-
-            fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken'),
-                },
-                body: JSON.stringify(payload),
-            })
-            .then(response => response.json())
-            .then(data => {
-                const aiMessageDiv = $('<div class="ai-message">').html(formatAIResponse(data.response));
-                chat.append(aiMessageDiv);
-                chat.scrollTop(chat[0].scrollHeight);
-            });
-        });
-
+        // Function to get CSRF token
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {
