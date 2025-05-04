@@ -6,6 +6,9 @@ urlpatterns = [
     path('openings/', views.opening_selection, name='opening_selection'),
     path('game/<int:opening_id>/', views.game, name='game'),
     
+    # Authentication
+    path('register/', views.register, name='register'),
+    
     # API endpoints
     path('api/game/<int:game_id>/move/', views.make_move, name='make_move'),
     path('api/game/<int:game_id>/ai_move/', views.get_ai_move, name='get_ai_move'),

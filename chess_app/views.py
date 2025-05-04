@@ -1,8 +1,8 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 import json
 import chess
 import chess.pgn
@@ -12,6 +12,8 @@ import random
 import spacy
 import openai
 from openai import OpenAI
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib import messages
 
 from .models import (
     Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge
@@ -739,3 +741,17 @@ def get_move_history(request, game_id):
         for m in moves
     ]
     return JsonResponse({'status': 'success', 'moves': move_list})
+
+@csrf_protect
+def register(request):
+    """View to handle user registration."""
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            UserProfile.objects.create(user=user)
+            messages.success(request, 'Registration successful! Please log in.')
+            return redirect('login')
+    else:
+        form = UserCreationForm()
+    return render(request, 'chess_app/register.html', {'form': form})
