@@ -22,12 +22,26 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
     # Django authentication URLs
-    path('accounts/login/', auth_views.LoginView.as_view(template_name='chess_app/login.html'), name='login'),
-    path('accounts/logout/', auth_views.LogoutView.as_view(next_page='/'), name='logout'),
+    path(
+        'accounts/login/',
+        auth_views.LoginView.as_view(
+            template_name='chess_app/login.html',
+            next_page='home'
+        ),
+        name='login'
+    ),
+    path(
+        'accounts/logout/',
+        auth_views.LogoutView.as_view(next_page='/'),
+        name='logout'
+    ),
     # Main application URLs
     path('', include('chess_app.urls')),
 ]
 
 # Add static file serving for development
 if settings.DEBUG:
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(
+        settings.STATIC_URL,
+        document_root=settings.STATIC_ROOT
+    )
