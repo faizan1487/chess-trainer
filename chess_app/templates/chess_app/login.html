@@ -31,7 +31,8 @@
                 </form>
             </div>
             <div class="card-footer">
-                <p class="mb-0">Don't have an account? <a href="#">Register</a></p>
+                <p class="mb-0">Don't have an account? <a href="{% url 'register' %}">Register</a></p>
+                <p class="mb-0 mt-2"><a href="{% url 'password_reset' %}">Forgot your password?</a></p>
             </div>
         </div>
     </div>
