@@ -14,6 +14,9 @@ import openai
 from openai import OpenAI
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
+from django.core.mail import send_mail
+from django.conf import settings
+from django import forms
 
 from .models import (
     Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge
@@ -461,7 +464,7 @@ def verify_challenge_solution(request, challenge_id):
 def analyze_question(question, board_fen=None, conversation_history=None):
     print("analyze_question method called")
     # logger.info(f"Received question: {question}")
-    # logger.info(f"Board FEN: {board_fen}")
+    logger.info(f"Board FEN: {board_fen}")
     # logger.info(f"Conversation history: {conversation_history}")
     
     try:
@@ -490,7 +493,7 @@ def analyze_question(question, board_fen=None, conversation_history=None):
 
         completion = client.chat.completions.create(
             extra_body={},
-            model="tngtech/deepseek-r1t-chimera:free",
+            model="qwen/qwen3-4b:free",
             messages=[
                 {
                     "role": "user",
@@ -742,16 +745,31 @@ def get_move_history(request, game_id):
     ]
     return JsonResponse({'status': 'success', 'moves': move_list})
 
+# Create a custom form that includes email
+class CustomUserCreationForm(UserCreationForm):
+    email = forms.EmailField(required=True)
+    
+    class Meta:
+        model = UserCreationForm.Meta.model
+        fields = UserCreationForm.Meta.fields + ('email',)
+    
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.email = self.cleaned_data['email']
+        if commit:
+            user.save()
+        return user
+
 @csrf_protect
 def register(request):
     """View to handle user registration."""
     if request.method == 'POST':
-        form = UserCreationForm(request.POST)
+        form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
             UserProfile.objects.create(user=user)
             messages.success(request, 'Registration successful! Please log in.')
             return redirect('login')
     else:
-        form = UserCreationForm()
+        form = CustomUserCreationForm()
     return render(request, 'chess_app/register.html', {'form': form})

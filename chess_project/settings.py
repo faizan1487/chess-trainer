@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'chess_app',
+    'widget_tweaks'
 ]
 
 MIDDLEWARE = [
@@ -56,7 +57,7 @@ ROOT_URLCONF = 'chess_project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'chess_app', 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -144,6 +145,21 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'django.security': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'django.mail': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
     },
 }
 
@@ -156,3 +172,20 @@ NLTK_DATA_PATH = os.path.join(BASE_DIR, 'nltk_data')
 if not os.path.exists(NLTK_DATA_PATH):
     os.makedirs(NLTK_DATA_PATH)
 os.environ['NLTK_DATA'] = NLTK_DATA_PATH
+
+# Email settings
+print("Configuring email settings...")
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = 'faizanahmed14877@gmail.com'
+EMAIL_HOST_PASSWORD = 'lgcy qdyx ffrd ndxi'
+print(f"Email configuration: Host={EMAIL_HOST}, Port={EMAIL_PORT}, TLS={EMAIL_USE_TLS}, SSL={EMAIL_USE_SSL}")
+
+# Development settings
+if DEBUG:
+    # Enable static files auto-reloading
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
