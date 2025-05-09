@@ -28,25 +28,25 @@ logger = logging.getLogger(__name__)
 
 class CustomPasswordResetView(auth_views.PasswordResetView):
     def form_valid(self, form):
-        print("\n=== Password Reset Process Started ===")
-        print("Password reset form is valid")
-        print(f"Email being sent to: {form.cleaned_data['email']}")
+        # print("\n=== Password Reset Process Started ===")
+        # print("Password reset form is valid")
+        # print(f"Email being sent to: {form.cleaned_data['email']}")
         
         # Get the email content before sending
         email = form.cleaned_data['email']
         users = list(form.get_users(email))  # Convert generator to list
-        print(f"Found {len(users)} users with email {email}")
+        # print(f"Found {len(users)} users with email {email}")
         
         if not users:
-            print("No users found with this email address")
+            # print("No users found with this email address")
             return super().form_valid(form)
             
         for user in users:
-            print(f"\nGenerating reset link for user: {user.username}")
+            # print(f"\nGenerating reset link for user: {user.username}")
             token = self.token_generator.make_token(user)
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
             reset_url = f"{self.request.scheme}://{self.request.get_host()}/accounts/reset/{uidb64}/{token}/"
-            print(f"Reset URL: {reset_url}")
+            # print(f"Reset URL: {reset_url}")
             
             # Get email content
             context = {
@@ -58,7 +58,7 @@ class CustomPasswordResetView(auth_views.PasswordResetView):
                 'token': token,
                 'protocol': self.request.scheme,
             }
-            print("\nEmail Context:")
+            # print("\nEmail Context:")
             for key, value in context.items():
                 print(f"{key}: {value}")
             
@@ -72,9 +72,9 @@ class CustomPasswordResetView(auth_views.PasswordResetView):
                 context
             )
             
-            print("\nSending email with:")
-            print(f"Subject: {subject}")
-            print(f"Message: {message}")
+            # print("\nSending email with:")
+            # print(f"Subject: {subject}")
+            # print(f"Message: {message}")
             
             try:
                 send_mail(
@@ -85,13 +85,13 @@ class CustomPasswordResetView(auth_views.PasswordResetView):
                     fail_silently=False,
                     html_message=message
                 )
-                print("\nPassword reset email sent successfully")
+                # print("\nPassword reset email sent successfully")
             except Exception as e:
-                print(f"\nError sending password reset email: {str(e)}")
+                # print(f"\nError sending password reset email: {str(e)}")
                 logger.error(f"Password reset email error: {str(e)}")
                 raise
         
-        print("=== Password Reset Process Completed ===\n")
+        # print("=== Password Reset Process Completed ===\n")
         return super().form_valid(form)
 
 urlpatterns = [

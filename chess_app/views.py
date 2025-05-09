@@ -120,7 +120,7 @@ def make_move(request, game_id):
     logger.info(f"Board after move: {board.fen()}")
     
     # Generate detailed feedback using the board state BEFORE the move
-    feedback = feedback_generator.generate_move_feedback(
+    feedback_body, ai_classification = feedback_generator.generate_move_feedback(
         board_fen=position_before,
         move_uci=move_uci,
         classification=classification,
@@ -129,9 +129,9 @@ def make_move(request, game_id):
     
     # Generate improvement suggestion if needed
     improvement = ""
-    if classification not in ["best", "excellent", "good"]:
+    if ai_classification not in ["best", "excellent", "good"]:
         improvement = feedback_generator.suggest_improvement(
-            board.fen(), classification
+            board.fen(), ai_classification
         )
     
     # Save the move to the database
@@ -144,9 +144,9 @@ def make_move(request, game_id):
         position_after=board.fen(),
         player='user',
         eval_score=eval_score,
-        is_mistake=classification in ["mistake", "blunder"],
-        quality=classification,
-        feedback=feedback,
+        is_mistake=ai_classification in ["mistake", "blunder"],
+        quality=ai_classification,
+        feedback=feedback_body,
         improvement_suggestion=improvement
     )
     
@@ -155,16 +155,16 @@ def make_move(request, game_id):
     game_obj.save()
     
     # Update user progress
-    update_user_progress(request.user, game_obj.opening, classification)
+    update_user_progress(request.user, game_obj.opening, ai_classification)
     
     response = {
         'status': 'success',
         'move': move_uci,
-        'feedback': feedback,
+        'feedback': feedback_body,
         'improvement': improvement,
-        'classification': classification
+        'move_classification': ai_classification
     }
-    logger.info(f"Returning move analysis response: {response}")
+    # logger.info(f"Returning move analysis response: {response}")
     return JsonResponse(response)
 
 @login_required

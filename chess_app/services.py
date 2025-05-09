@@ -8,6 +8,7 @@ from nltk.corpus import stopwords
 import logging
 from django.conf import settings
 import re
+from openai import OpenAI
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -371,8 +372,6 @@ class ChessNLP:
             "Return only the intent."
         )
         try:
-            from django.conf import settings
-            from openai import OpenAI
             client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=getattr(settings, 'OPENAI_API_KEY', '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')
@@ -681,10 +680,124 @@ class FeedbackGenerator:
     def __init__(self, stockfish_engine=None):
         self.engine = stockfish_engine if stockfish_engine else StockfishEngine()
         self.opening_explorer = OpeningExplorer()
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=getattr(settings, 'OPENAI_API_KEY', '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')
+        )
+    
+    def _generate_ai_feedback(self, board_fen, move_uci, classification, stockfish_analysis, opening=None):
+        """
+        Generate feedback using AI based on Stockfish analysis and move context.
+        """
+        try:
+            # Create board from FEN string if it's not already a Board object
+            board = board_fen if isinstance(board_fen, chess.Board) else chess.Board(board_fen)
+            move = chess.Move.from_uci(move_uci)
+            
+            # Get move information
+            piece_moved = board.piece_at(move.from_square)
+            is_capture = board.is_capture(move)
+            gives_check = board.gives_check(move)
+            
+            # Create a prompt for the AI
+            prompt = f"""
+            You are a chess coach analyzing a move. Here are the details:
+            
+            Move: {move_uci}
+            Piece moved: {piece_moved.symbol().upper() if piece_moved else 'Unknown'}
+            Move classification: {classification}
+            Is capture: {is_capture}
+            Gives check: {gives_check}
+            Opening: {opening.name if opening else 'Not in a specific opening'}
+            Board FEN: {board_fen}
+            
+            Stockfish analysis:
+            - Best move: {stockfish_analysis.get('best_move', 'Unknown')}
+            - Evaluation: {stockfish_analysis.get('evaluation', 'Unknown')}
+            - Alternative moves: {stockfish_analysis.get('alternatives', [])}
+            
+            Please provide:
+            1. A brief analysis of the move
+            2. What was good or bad about it
+            3. A suggestion for improvement if needed
+            4. A teaching point about the position
+            5. Do not mention stockfish or the engine in the feedback
+            6. Classify the move as best, good, inaccuracy, mistake, or blunder
+            7. Suggest alternatives if the move is a mistake or blunder
+            
+            Keep the feedback concise, educational, and encouraging.
+            """
+            # print("classification", classification)
+            print("prompt", prompt)
+            
+            # Get AI response
+            completion = self.client.chat.completions.create(
+                model="google/gemini-2.0-flash-001",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
+            # print("ai feedback", completion.choices[0].message.content.strip())
+            return completion.choices[0].message.content.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating AI feedback: {e}")
+            return None
     
     def generate_move_feedback(self, board_fen, move_uci, classification, opening=None):
         """
         Generate detailed feedback for a move based on its classification and position.
+        Returns a tuple: (feedback_body, ai_classification)
+        """
+        try:
+            # Get Stockfish analysis
+            board = board_fen if isinstance(board_fen, chess.Board) else chess.Board(board_fen)
+            top_moves = self.engine.get_top_moves(board_fen, 3)
+            
+            stockfish_analysis = {
+                'best_move': top_moves[0]['san'] if top_moves else 'Unknown',
+                'evaluation': top_moves[0]['score'] if top_moves else 0.0,
+                'alternatives': [move['san'] for move in top_moves[1:]] if len(top_moves) > 1 else []
+            }
+            
+            # Try to get AI feedback first
+            ai_feedback = self._generate_ai_feedback(
+                board_fen, 
+                move_uci, 
+                classification, 
+                stockfish_analysis,
+                opening
+            )
+            
+            if ai_feedback:
+                # Try to extract the AI's classification from the feedback
+                import re
+                ai_classification = None
+                feedback_body = ai_feedback
+                # Look for a line like "Classification: ..." (case-insensitive)
+                match = re.search(r"Classification\s*[:\-]\s*(best|good|inaccuracy|mistake|blunder)", ai_feedback, re.IGNORECASE)
+                if match:
+                    ai_classification = match.group(1).lower()
+                    # Remove the classification line from the feedback body
+                    feedback_body = re.sub(r"\*?Classification\s*[:\-]\s*(best|good|inaccuracy|mistake|blunder)\*?\.?", "", ai_feedback, flags=re.IGNORECASE).strip()
+                else:
+                    # Fallback to the original classification if not found
+                    ai_classification = classification
+                return feedback_body, ai_classification
+            
+            # Fallback to traditional feedback if AI fails
+            return self._generate_traditional_feedback(board_fen, move_uci, classification, opening), classification
+            
+        except Exception as e:
+            logger.error(f"Error generating move feedback: {e}")
+            return f"Move analysis: {classification.capitalize()}. Consider analyzing the position carefully.", classification
+    
+    def _generate_traditional_feedback(self, board_fen, move_uci, classification, opening=None):
+        """
+        Generate traditional feedback as a fallback when AI feedback fails.
         """
         try:
             # Create board from FEN string if it's not already a Board object
@@ -810,7 +923,7 @@ class FeedbackGenerator:
             
             return feedback
         except Exception as e:
-            logger.error(f"Error generating move feedback: {e}")
+            logger.error(f"Error generating traditional feedback: {e}")
             return f"Move analysis: {classification.capitalize()}. Consider analyzing the position carefully."
 
     def suggest_improvement(self, board_fen, classification):

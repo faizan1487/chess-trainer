@@ -4,6 +4,7 @@
 {% block title %}{{ opening.name }} Training{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
 <style>
     .chessboard {
         width: 100%;
@@ -434,31 +435,49 @@
         function displayFeedback(data) {
             console.log("Feedback data received:", data);
             const feedback = data.feedback;
-            const classification = data.classification;
+            const move_classification = data.move_classification;
             const improvement = data.improvement;
             
             let classColor = '';
-            switch(classification) {
-                case 'best': classColor = 'best-move'; break;
-                case 'excellent': classColor = 'excellent-move'; break;
-                case 'good': classColor = 'good-move'; break;
-                case 'inaccuracy': classColor = 'inaccuracy-move'; break;
-                case 'mistake': classColor = 'mistake-move'; break;
-                case 'blunder': classColor = 'blunder-move'; break;
-                default: classColor = 'normal-move';
+            let iconHtml = '';
+            switch(move_classification) {
+                case 'best': classColor = 'best-move'; iconHtml = '🌟'; break;
+                case 'excellent': classColor = 'excellent-move'; iconHtml = '👍'; break;
+                case 'good': classColor = 'good-move'; iconHtml = '👌'; break;
+                case 'inaccuracy': classColor = 'inaccuracy-move'; iconHtml = '⚠️'; break;
+                case 'mistake': classColor = 'mistake-move'; iconHtml = '❗'; break;
+                case 'blunder': classColor = 'blunder-move'; iconHtml = '💥'; break;
+                default: classColor = 'normal-move'; iconHtml = '●';
             }
-            
+
+            // Try to format feedback body into sections if possible
+            let formattedFeedback = feedback;
+            // If feedback contains ** or numbered sections, format as HTML
+            if (/\*\*.*\*\*/.test(feedback)) {
+                formattedFeedback = feedback
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n/g, '<br>');
+            } else if (/\d+\./.test(feedback)) {
+                // Numbered list: split into paragraphs
+                formattedFeedback = feedback.replace(/(\d+\.)/g, '<br><strong>$1</strong> ');
+            } else {
+                formattedFeedback = `<p>${feedback}</p>`;
+            }
+
             let feedbackHtml = `
-                <div class="d-flex align-items-center mb-2">
-                    <span class="move-quality-indicator" style="background-color: var(--bs-${classColor.split('-')[0]})"></span>
-                    <span class="${classColor} text-capitalize">${classification}</span>
+                <div class="feedback-card animate__animated animate__fadeInUp">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="move-quality-indicator ${classColor}" style="font-size:1.3em; margin-right:8px;">${iconHtml}</span>
+                        <span class="${classColor} text-capitalize" style="font-size:1.1em;">${move_classification.charAt(0).toUpperCase() + move_classification.slice(1)}</span>
+                    </div>
+                    <div class="move-analysis" style="margin-top: 12px;">${formattedFeedback}</div>
                 </div>
-                <div class="move-analysis">${feedback}</div>
             `;
             
             if (improvement) {
-                feedbackHtml += `<div class="improvement-suggestion">${improvement}</div>`;
+                feedbackHtml += `<div class="improvement-suggestion"><strong>Suggestion:</strong> ${improvement}</div>`;
             }
+            feedbackHtml += '</div>';
             
             $('#feedback-container').removeClass('d-none').html(feedbackHtml);
         }
