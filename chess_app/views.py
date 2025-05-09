@@ -173,25 +173,27 @@ def get_ai_move(request, game_id):
     """API endpoint to get the AI's next move."""
     game_obj = get_object_or_404(Game, id=game_id, user=request.user)
     
-    # Create a chess board from the current position
-    # Commenting out unused variables
-    # board = chess.Board(game_obj.fen_position)
+    # Reconstruct the board from the full move history
+    board = chess.Board()
+    moves = Move.objects.filter(game=game_obj).order_by('move_number')
+    for m in moves:
+        try:
+            board.push_uci(m.move_uci)
+        except Exception as e:
+            print(f"Error pushing move {m.move_uci}: {e}")
+            break
     
     # Generate AI move based on the opening or engine
     ai_move, san_move, evaluation = generate_ai_move(
-        chess.Board(game_obj.fen_position),
+        board,
         game_obj.opening,
         game_obj.ai_strength
     )  # noqa: E501
     
     if ai_move:
-        # Apply the move to the board
-        # Commenting out unused variables
-        # board.push(ai_move)
-        
         # Generate feedback for the AI move
         feedback = generate_ai_explanation(
-            chess.Board(game_obj.fen_position),
+            board,
             ai_move,
             game_obj.opening
         )  # noqa: E501
@@ -202,8 +204,8 @@ def get_ai_move(request, game_id):
             move_number=get_next_move_number(game_obj),
             move_uci=ai_move.uci(),
             move_san=san_move,
-            position_before=game_obj.fen_position,
-            position_after=game_obj.fen_position,
+            position_before=board.fen(),
+            position_after=board.fen(),
             player='ai',
             eval_score=evaluation,
             quality='best',  # AI always plays best moves
@@ -211,7 +213,7 @@ def get_ai_move(request, game_id):
         )
         
         # Update the game state
-        game_obj.fen_position = game_obj.fen_position
+        game_obj.fen_position = board.fen()
         game_obj.save()
         
         return JsonResponse({
