@@ -564,7 +564,13 @@ class OpeningExplorer:
         # Get the move number we're at 
         # This should correspond to the index in the filtered moves list
         move_count = len(board.move_stack)
-        
+        # Fix: Use a fresh board for SAN conversion
+        san_moves = []
+        temp_board = chess.Board()  # Always start from the initial position
+        for m in board.move_stack:
+            san_moves.append(temp_board.san(m))
+            temp_board.push(m)
+
         # Check if we're still within the opening book
         if move_count < len(main_line_moves):
             try:
