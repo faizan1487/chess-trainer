@@ -93,13 +93,13 @@ def make_move(request, game_id):
     position_before = request.POST.get('position_before')
     
     # Log the received move and board state
-    logger.info(f"Received move: {move_uci} for game: {game_id}")
-    logger.info(f"Board position before move: {position_before}")
+    # logger.info(f"Received move: {move_uci} for game: {game_id}")
+    # logger.info(f"Board position before move: {position_before}")
     
     # Create a chess board from the position before the move
     board = chess.Board(position_before)
     move = chess.Move.from_uci(move_uci)
-    logger.info(f"Checking legality of move {move_uci} on board: {board.fen()}")
+    # logger.info(f"Checking legality of move {move_uci} on board: {board.fen()}")
     
     # Validate the move
     if move not in board.legal_moves:
@@ -110,14 +110,14 @@ def make_move(request, game_id):
     eval_score, classification, reason = stockfish_engine.analyze_move(
         position_before, move_uci
     )
-    logger.info(f"Analysis result: eval_score={eval_score}, classification={classification}, reason={reason}")
+    # logger.info(f"Analysis result: eval_score={eval_score}, classification={classification}, reason={reason}")
     if classification == "illegal":
         logger.warning(f"Analysis found move illegal: {move_uci} on board: {position_before}")
         return JsonResponse({'status': 'error', 'message': reason}, status=400)
     
     # Now push the move
     board.push(move)
-    logger.info(f"Board after move: {board.fen()}")
+    # logger.info(f"Board after move: {board.fen()}")
     
     # Generate detailed feedback using the board state BEFORE the move
     feedback_body, ai_classification = feedback_generator.generate_move_feedback(
@@ -180,7 +180,7 @@ def get_ai_move(request, game_id):
         try:
             board.push_uci(m.move_uci)
         except Exception as e:
-            print(f"Error pushing move {m.move_uci}: {e}")
+            # print(f"Error pushing move {m.move_uci}: {e}")
             break
     
     # Generate AI move based on the opening or engine
@@ -281,7 +281,7 @@ def get_hint(request, game_id):
 @login_required
 @require_POST
 def chat(request, game_id):
-    print("Chat request received")
+    # print("Chat request received")
     """API endpoint for chat interaction with the AI."""
     game_obj = get_object_or_404(Game, id=game_id, user=request.user)
     
@@ -295,16 +295,16 @@ def chat(request, game_id):
             # print("fen in try", board_fen)
             # print("conversation history:", conversation_history)
         except Exception as e:
-            print(f"Error parsing JSON body: {e}")
+            # print(f"Error parsing JSON body: {e}")
             message = ''
             board_fen = game_obj.fen_position
             conversation_history = []
-            print("fen in except", board_fen)
+            # print("fen in except", board_fen)
     else:
         message = request.POST.get('message', '')
         board_fen = request.POST.get('fen', game_obj.fen_position)
         conversation_history = request.POST.get('history', [])
-        print("fen in else", board_fen)
+        # print("fen in else", board_fen)
 
     # Add the new message to the conversation history
     conversation_history.append({"role": "user", "content": message})
@@ -464,9 +464,9 @@ def verify_challenge_solution(request, challenge_id):
     })
 
 def analyze_question(question, board_fen=None, conversation_history=None):
-    print("analyze_question method called")
+    # print("analyze_question method called")
     # logger.info(f"Received question: {question}")
-    logger.info(f"Board FEN: {board_fen}")
+    # logger.info(f"Board FEN: {board_fen}")
     # logger.info(f"Conversation history: {conversation_history}")
     
     try:
@@ -503,7 +503,7 @@ def analyze_question(question, board_fen=None, conversation_history=None):
                 }
             ]
         )
-        print("completion", completion)
+        # print("completion", completion)
         
         # Extract the final response from the completion
         raw_response = completion.choices[0].message.content
@@ -515,7 +515,7 @@ def analyze_question(question, board_fen=None, conversation_history=None):
 
 @csrf_exempt
 def ask_question(request):
-    print(f"Received request: {request}")
+    # print(f"Received request: {request}")
     if request.method == 'POST':
         data = json.loads(request.body)
         question = data.get('message', '')
@@ -533,7 +533,7 @@ def validate_move(board, move):
     board_copy = board.copy()
     
     # Log the current board state and move
-    logger.info(f"Validating move: {move.uci()} on board: {board.fen()}")
+    # logger.info(f"Validating move: {move.uci()} on board: {board.fen()}")
     
     # First check if the move is already legal
     if move in board_copy.legal_moves:

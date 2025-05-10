@@ -59,8 +59,8 @@ class CustomPasswordResetView(auth_views.PasswordResetView):
                 'protocol': self.request.scheme,
             }
             # print("\nEmail Context:")
-            for key, value in context.items():
-                print(f"{key}: {value}")
+            # for key, value in context.items():
+            #     print(f"{key}: {value}")
             
             # Render email templates
             subject = render_to_string(

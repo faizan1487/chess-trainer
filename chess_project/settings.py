@@ -174,7 +174,7 @@ if not os.path.exists(NLTK_DATA_PATH):
 os.environ['NLTK_DATA'] = NLTK_DATA_PATH
 
 # Email settings
-print("Configuring email settings...")
+# print("Configuring email settings...")
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -183,7 +183,7 @@ EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 EMAIL_HOST_USER = 'faizanahmed14877@gmail.com'
 EMAIL_HOST_PASSWORD = 'lgcy qdyx ffrd ndxi'
-print(f"Email configuration: Host={EMAIL_HOST}, Port={EMAIL_PORT}, TLS={EMAIL_USE_TLS}, SSL={EMAIL_USE_SSL}")
+# print(f"Email configuration: Host={EMAIL_HOST}, Port={EMAIL_PORT}, TLS={EMAIL_USE_TLS}, SSL={EMAIL_USE_SSL}")
 
 # Development settings
 if DEBUG:

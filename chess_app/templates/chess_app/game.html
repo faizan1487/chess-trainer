@@ -435,12 +435,13 @@
         function displayFeedback(data) {
             console.log("Feedback data received:", data);
             const feedback = data.feedback;
-            const move_classification = data.move_classification;
+            {% comment %} const move_classification = data.move_classification; {% endcomment %}
+            {% comment %} console.log("move_classification", move_classification) {% endcomment %}
             const improvement = data.improvement;
             
             let classColor = '';
             let iconHtml = '';
-            switch(move_classification) {
+            {% comment %} switch(move_classification) {
                 case 'best': classColor = 'best-move'; iconHtml = '🌟'; break;
                 case 'excellent': classColor = 'excellent-move'; iconHtml = '👍'; break;
                 case 'good': classColor = 'good-move'; iconHtml = '👌'; break;
@@ -448,7 +449,7 @@
                 case 'mistake': classColor = 'mistake-move'; iconHtml = '❗'; break;
                 case 'blunder': classColor = 'blunder-move'; iconHtml = '💥'; break;
                 default: classColor = 'normal-move'; iconHtml = '●';
-            }
+            } {% endcomment %}
 
             // Try to format feedback body into sections if possible
             let formattedFeedback = feedback;
@@ -468,7 +469,6 @@
                 <div class="feedback-card animate__animated animate__fadeInUp">
                     <div class="d-flex align-items-center mb-2">
                         <span class="move-quality-indicator ${classColor}" style="font-size:1.3em; margin-right:8px;">${iconHtml}</span>
-                        <span class="${classColor} text-capitalize" style="font-size:1.1em;">${move_classification.charAt(0).toUpperCase() + move_classification.slice(1)}</span>
                     </div>
                     <div class="move-analysis" style="margin-top: 12px;">${formattedFeedback}</div>
                 </div>

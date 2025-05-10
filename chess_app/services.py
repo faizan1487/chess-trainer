@@ -40,7 +40,7 @@ class StockfishEngine:
         try:
             # Try to find Stockfish in the system path
             self._engine = chess.engine.SimpleEngine.popen_uci("stockfish")
-            logger.info("Stockfish engine initialized")
+            # logger.info("Stockfish engine initialized")
             return True
         except Exception as e:
             logger.warning(f"Failed to initialize Stockfish: {e}")
@@ -68,7 +68,7 @@ class StockfishEngine:
             return True
         except Exception as e:
             logger.error(f"Engine check failed: {e}")
-            logger.info("Attempting to restart Stockfish engine")
+            # logger.info("Attempting to restart Stockfish engine")
             return self._initialize_engine()
     
     @lru_cache(maxsize=1024)
@@ -209,9 +209,9 @@ class StockfishEngine:
             return []
     
     def analyze_move(self, fen, move_uci, depth=15):
-        print("analyze_move method called")
-        print(f"FEN: {fen}")
-        print(f"Move UCI: {move_uci}")
+        # print("analyze_move method called")
+        # print(f"FEN: {fen}")
+        # print(f"Move UCI: {move_uci}")
         """
         Analyze a specific move compared to the best move.
         Returns evaluation, classification and reason.
@@ -364,7 +364,7 @@ class ChessNLP:
         }
     
     def analyze_message(self, message, board_fen=None, opening=None):
-        print("analyze message called")
+        # print("analyze message called")
         # Compose a prompt for Gemini
         prompt = (
             "Classify the user's intent as one of: opening_info, move_analysis, general, greeting, hint, or other.\n"
@@ -388,7 +388,7 @@ class ChessNLP:
             )
             intent = completion.choices[0].message.content.strip().lower()
         except Exception as e:
-            print(f"Gemini intent detection failed: {e}")
+            # print(f"Gemini intent detection failed: {e}")
             intent = "general"
 
         # Extract move UCI using multiple patterns
@@ -408,12 +408,12 @@ class ChessNLP:
                 except ValueError:
                     pass
 
-        print("move", move_uci)
+        # print("move", move_uci)
         if intent == "move_analysis" and move_uci:
             return {'intent': 'move_analysis', 'move_uci': move_uci}
         elif intent == "opening_info":
             return {'intent': 'opening_info'}
-        print("returning intent")
+        # print("returning intent")
         return {'intent': intent}
     
     def _determine_intent(self, message, topics, tokens):
@@ -441,7 +441,7 @@ class ChessNLP:
         return 'general_chat'
     
     def generate_response(self, analysis, stockfish_engine=None, game=None):
-        print(f"Generating response for analysis: {analysis}")
+        # print(f"Generating response for analysis: {analysis}")
         """
         Generate a response based on message analysis.
         Uses game state and Stockfish if available.
@@ -553,7 +553,7 @@ class OpeningExplorer:
         
         # First check if we're still in opening theory by comparing the current position
         if not self.is_position_in_opening(board, opening):
-            logger.info(f"Position {board.fen()} is no longer in opening theory")
+            # logger.info(f"Position {board.fen()} is no longer in opening theory")
             return None
         
         # Parse the main line, filtering out move numbers (entries ending with '.')
@@ -575,7 +575,7 @@ class OpeningExplorer:
             try:
                 # Try to parse the book move
                 book_move_san = main_line_moves[move_count]
-                logger.info(f"Trying book move: {book_move_san} at position {move_count}")
+                # logger.info(f"Trying book move: {book_move_san} at position {move_count}")
                 book_move = board.parse_san(book_move_san)
                 
                 # Validate that this is a legal move
@@ -600,7 +600,7 @@ class OpeningExplorer:
         
         # If we're past move 10, consider it out of opening theory
         if len(board.move_stack) > 20:  # 10 full moves = 20 half-moves
-            logger.info(f"Move count {len(board.move_stack)} exceeds opening phase")
+            # logger.info(f"Move count {len(board.move_stack)} exceeds opening phase")
             return False
         
         # Create a new board and apply the opening moves
@@ -638,7 +638,7 @@ class OpeningExplorer:
                 continue
             
         # If we get here, we didn't find a match
-        logger.info(f"Current position {board.fen()} not found in opening theory")
+        # logger.info(f"Current position {board.fen()} not found in opening theory")
         return False
     
     def generate_explanation(self, board, move, opening):
@@ -728,7 +728,7 @@ class FeedbackGenerator:
             Keep the feedback concise, educational, and encouraging.
             """
             # print("classification", classification)
-            print("prompt", prompt)
+            # print("prompt", prompt)
             
             # Get AI response
             completion = self.client.chat.completions.create(
