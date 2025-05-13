@@ -52,7 +52,7 @@ class CustomPasswordResetView(auth_views.PasswordResetView):
             context = {
                 'email': user.email,
                 'domain': self.request.get_host(),
-                'site_name': 'Chess Trainer',
+                'site_name': 'Chessary',
                 'uid': uidb64,
                 'user': user,
                 'token': token,
