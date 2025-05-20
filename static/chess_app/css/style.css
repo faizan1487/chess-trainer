@@ -87,4 +87,52 @@ footer {
     .move-history {
         height: 200px;
     }
-} 
+}
+
+
+.password-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.password-input-container {
+    display: flex;
+    align-items: center; /* Centering the input and icon vertically */
+    position: relative;
+    width: 100%;
+    max-width: 300px;  /* Reduced width of the input field */
+}
+
+.password-input {
+    width: 100%;
+    padding-right: 2.5rem; /* Add space for the icon */
+}
+
+.password-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    position: absolute;
+    top: 50%;
+    right: 1rem;  /* Adjust position */
+    transform: translateY(-50%);
+    z-index: 10;
+}
+
+.password-toggle svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: #333;
+}
+
+/* Register Button Styles */
+.group.relative {
+    background: #4CAF50; /* Green color */
+    border-color: #4CAF50;
+    transition: background-color 0.3s ease, border-color 0.3s ease; /* Smooth transition */
+}
+
+.group.relative:hover {
+    background: #45a049; /* Darker green when hovered */
+    border-color: #45a049;
+}
