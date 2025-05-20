@@ -495,7 +495,7 @@ def analyze_question(question, board_fen=None, conversation_history=None):
 
         completion = client.chat.completions.create(
             extra_body={},
-            model="qwen/qwen3-4b:free",
+            model="google/gemini-2.0-flash-001",
             messages=[
                 {
                     "role": "user",
