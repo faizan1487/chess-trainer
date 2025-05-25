@@ -1,0 +1,280 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Game Analysis & Opening Recommendations</h1>
+    
+    <!-- Analysis Source Selection -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Choose Analysis Source</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Upload PGN File</h5>
+                            <p class="card-text">Upload your games in PGN format for analysis</p>
+                            <form id="pgn-form" class="mt-3">
+                                <div class="form-group">
+                                    <input type="file" class="form-control-file" id="pgn-file" accept=".pgn" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary mt-2">Analyze PGN</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Lichess Account</h5>
+                            <p class="card-text">Analyze your recent Lichess games</p>
+                            <form id="lichess-form" class="mt-3">
+                                <div class="form-group">
+                                    <input type="text" class="form-control" id="lichess-username" placeholder="Lichess Username" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary mt-2">Analyze Lichess Games</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Chess.com Account</h5>
+                            <p class="card-text">Analyze your recent Chess.com games</p>
+                            <form id="chess-com-form" class="mt-3">
+                                <div class="form-group">
+                                    <input type="text" class="form-control" id="chess-com-username" placeholder="Chess.com Username" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary mt-2">Analyze Chess.com Games</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Analysis Results -->
+    <div id="analysis-results" class="d-none">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Analysis Results</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Game Statistics</h6>
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Total Games
+                                <span id="total-games" class="badge badge-primary badge-pill">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Average Mistakes
+                                <span id="avg-mistakes" class="badge badge-warning badge-pill">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Average Blunders
+                                <span id="avg-blunders" class="badge badge-danger badge-pill">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Average Centipawn Loss
+                                <span id="avg-cpl" class="badge badge-info badge-pill">0</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Most Played Openings</h6>
+                        <div id="openings-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Opening Recommendations -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Opening Recommendations</h5>
+            </div>
+            <div class="card-body">
+                <div id="recommendations-container">
+                    <!-- Recommendations will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Analysis History -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Analysis History</h5>
+        </div>
+        <div class="card-body">
+            <div id="history-container">
+                <!-- History items will be inserted here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Spinner -->
+<div id="loading-spinner" class="modal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+                <p class="mt-2">Analyzing your games...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Handle PGN file upload
+    $('#pgn-form').on('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append('source', 'PGN');
+        formData.append('pgn_file', $('#pgn-file')[0].files[0]);
+        analyzeGames(formData);
+    });
+    
+    // Handle Lichess analysis
+    $('#lichess-form').on('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append('source', 'LICHESS');
+        formData.append('username', $('#lichess-username').val());
+        analyzeGames(formData);
+    });
+    
+    // Handle Chess.com analysis
+    $('#chess-com-form').on('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append('source', 'CHESS_COM');
+        formData.append('username', $('#chess-com-username').val());
+        analyzeGames(formData);
+    });
+    
+    function analyzeGames(formData) {
+        // Show loading spinner
+        $('#loading-spinner').modal('show');
+        
+        $.ajax({
+            url: '/api/analyze-games/',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                // Hide loading spinner
+                $('#loading-spinner').modal('hide');
+                
+                if (response.status === 'success') {
+                    displayAnalysisResults(response);
+                    loadAnalysisHistory();
+                }
+            },
+            error: function(error) {
+                // Hide loading spinner
+                $('#loading-spinner').modal('hide');
+                
+                // Show error message
+                alert('Error analyzing games: ' + error.responseJSON.message);
+            }
+        });
+    }
+    
+    function displayAnalysisResults(data) {
+        // Show results section
+        $('#analysis-results').removeClass('d-none');
+        
+        // Update statistics
+        $('#total-games').text(data.total_games);
+        $('#avg-mistakes').text(data.avg_mistakes.toFixed(2));
+        $('#avg-blunders').text(data.avg_blunders.toFixed(2));
+        $('#avg-cpl').text(data.avg_centipawn_loss.toFixed(2));
+        
+        // Create openings chart
+        const openings = data.common_openings;
+        const openingNames = Object.keys(openings);
+        const openingCounts = openingNames.map(name => openings[name].count);
+        
+        const chartData = [{
+            values: openingCounts,
+            labels: openingNames,
+            type: 'pie'
+        }];
+        
+        const layout = {
+            height: 300,
+            margin: { t: 0, b: 0, l: 0, r: 0 }
+        };
+        
+        Plotly.newPlot('openings-chart', chartData, layout);
+        
+        // Display recommendations
+        const recommendationsHtml = data.recommendations.map(rec => `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">${rec.name}</h5>
+                    <p class="card-text">${rec.explanation}</p>
+                    <h6>Key Ideas:</h6>
+                    <ul>
+                        ${rec.key_ideas.map(idea => `<li>${idea}</li>`).join('')}
+                    </ul>
+                    <h6>Watch Out For:</h6>
+                    <ul>
+                        ${rec.pitfalls.map(pitfall => `<li>${pitfall}</li>`).join('')}
+                    </ul>
+                </div>
+            </div>
+        `).join('');
+        
+        $('#recommendations-container').html(recommendationsHtml);
+    }
+    
+    function loadAnalysisHistory() {
+        $.get('/api/analysis-history/', function(response) {
+            if (response.status === 'success') {
+                const historyHtml = response.history.map(analysis => `
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6>Analysis from ${analysis.source}</h6>
+                            <p class="text-muted">${analysis.created_at}</p>
+                            <p>Games analyzed: ${analysis.total_games}</p>
+                            <button class="btn btn-sm btn-primary" 
+                                    onclick="showAnalysisDetails(${analysis.id})">
+                                View Details
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+                
+                $('#history-container').html(historyHtml);
+            }
+        });
+    }
+    
+    // Load analysis history on page load
+    loadAnalysisHistory();
+});
+
+function showAnalysisDetails(analysisId) {
+    // TODO: Implement analysis details modal
+}
+</script>
+{% endblock %} 

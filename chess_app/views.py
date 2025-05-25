@@ -14,16 +14,15 @@ import openai
 from openai import OpenAI
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
-from django.core.mail import send_mail
-from django.conf import settings
 from django import forms
 
 from .models import (
-    Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge
+    Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge,
+    GameAnalysis, OpeningRecommendation
 )
 from .services import (
-    StockfishEngine, ChessNLP, FeedbackGenerator, OpeningExplorer
-)  # noqa: E501
+    StockfishEngine, ChessNLP, FeedbackGenerator, OpeningExplorer, GameAnalyzer
+)
 
 # Configure logging to output to the console
 logging.basicConfig(level=logging.INFO)
@@ -775,3 +774,254 @@ def register(request):
     else:
         form = CustomUserCreationForm()
     return render(request, 'chess_app/register.html', {'form': form})
+
+@login_required
+@require_POST
+def analyze_games(request):
+    """API endpoint to analyze games and get opening recommendations."""
+    try:
+        source = request.POST.get('source')
+        print(f"Received source: {source}")
+        
+        # Initialize game analyzer
+        game_analyzer = GameAnalyzer()
+        
+        if source == 'PGN':
+            # Handle PGN file upload
+            pgn_file = request.FILES.get('pgn_file')
+            if not pgn_file:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No PGN file provided'
+                }, status=400)
+            
+            # Read and analyze PGN data
+            pgn_data = pgn_file.read().decode('utf-8')
+            analyzed_games = game_analyzer.analyze_games_from_pgn(pgn_data)
+            # print(f"Analyzed games: {analyzed_games}")
+            # Calculate aggregate statistics
+            total_games = len(analyzed_games)
+            if total_games == 0:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No valid games found in PGN file'
+                }, status=400)
+            
+            avg_mistakes = sum(g['mistakes'] for g in analyzed_games) / total_games
+            avg_blunders = sum(g['blunders'] for g in analyzed_games) / total_games
+            avg_cpl = sum(g['avg_centipawn_loss'] for g in analyzed_games) / total_games
+            
+            # Track opening statistics
+            openings = {}
+            for game in analyzed_games:
+                # print(f"Game: {game}")
+                opening = game['opening']
+                if opening:
+                    if opening not in openings:
+                        openings[opening] = {
+                            'count': 0,
+                            'wins': 0,
+                            'losses': 0,
+                            'draws': 0
+                        }
+                    openings[opening]['count'] += 1
+                    if game['result'] == '1-0' and game['player_color'] == 'white':
+                        openings[opening]['wins'] += 1
+                    elif game['result'] == '0-1' and game['player_color'] == 'black':
+                        openings[opening]['wins'] += 1
+                    elif game['result'] == '1/2-1/2':
+                        openings[opening]['draws'] += 1
+                    else:
+                        openings[opening]['losses'] += 1
+            
+            # Create game analysis record
+            analysis = GameAnalysis.objects.create(
+                user=request.user,
+                source='PGN',
+                source_identifier=pgn_file.name,
+                total_games=total_games,
+                avg_mistakes=avg_mistakes,
+                avg_blunders=avg_blunders,
+                avg_centipawn_loss=avg_cpl,
+                common_openings=openings
+            )
+            
+        elif source == 'LICHESS':
+            # Handle Lichess username
+            username = request.POST.get('username')
+            if not username:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No Lichess username provided'
+                }, status=400)
+                
+            analyzed_games = game_analyzer.analyze_lichess_games(username)
+            if not analyzed_games:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No games found or error accessing Lichess API'
+                }, status=400)
+                
+            # Create analysis record (similar to PGN analysis)
+            analysis = GameAnalysis.objects.create(
+                user=request.user,
+                source='LICHESS',
+                source_identifier=username,
+                # ... other fields similar to PGN analysis
+            )
+            
+        elif source == 'CHESS_COM':
+            # Handle Chess.com username
+            username = request.POST.get('username')
+            if not username:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No Chess.com username provided'
+                }, status=400)
+                
+            analyzed_games = game_analyzer.analyze_chess_com_games(username)
+            if not analyzed_games:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No games found or error accessing Chess.com API'
+                }, status=400)
+                
+            # Create analysis record (similar to PGN analysis)
+            analysis = GameAnalysis.objects.create(
+                user=request.user,
+                source='CHESS_COM',
+                source_identifier=username,
+                # ... other fields similar to PGN analysis
+            )
+            
+        else:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Invalid source specified'
+            }, status=400)
+        
+        # Get opening recommendations
+        recommendations = game_analyzer.get_opening_recommendations(
+            analyzed_games,
+            user_rating=request.user.profile.rating if hasattr(request.user, 'profile') else None
+        )
+        # print("recommendations: ", recommendations)
+        
+        # Store recommendations
+        for rec in recommendations:
+            print("rec: ", rec)
+            try:
+                print("rec['name']: ", rec['name'])
+                # Try exact match first
+                try:
+                    opening = Opening.objects.get(name=rec['name'])
+                except Opening.DoesNotExist:
+                    # If exact match fails, try partial match
+                    base_name = rec['name'].split('(')[0].strip()
+                    opening = Opening.objects.filter(name__icontains=base_name).first()
+                    if not opening:
+                        # Create a new opening if it doesn't exist
+                        logger.info(f"Creating new opening: {rec['name']}")
+                        opening = Opening.objects.create(
+                            name=rec['name'],
+                            description=rec['explanation'],
+                            pgn_moves=get_opening_moves_from_ai(rec['name']),
+                            difficulty=3,  # Default moderate difficulty
+                            is_popular=True  # Since it's being recommended
+                        )
+                
+                OpeningRecommendation.objects.create(
+                    analysis=analysis,
+                    opening=opening,
+                    explanation=rec['explanation'],
+                    key_ideas=rec['key_ideas'],
+                    pitfalls=rec['pitfalls']
+                )
+            except Exception as e:
+                logger.error(f"Error creating opening recommendation: {e}")
+                continue
+        
+        return JsonResponse({
+            'status': 'success',
+            'analysis_id': analysis.id,
+            'recommendations': recommendations
+        })
+        
+    except Exception as e:
+        logger.error(f"Error analyzing games: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': 'An error occurred while analyzing games'
+        }, status=500)
+
+@login_required
+@require_GET
+def get_analysis_history(request):
+    """API endpoint to get user's game analysis history."""
+    analyses = GameAnalysis.objects.filter(user=request.user).order_by('-created_at')
+    
+    history = []
+    for analysis in analyses:
+        recommendations = OpeningRecommendation.objects.filter(analysis=analysis)
+        history.append({
+            'id': analysis.id,
+            'source': analysis.source,
+            'source_identifier': analysis.source_identifier,
+            'created_at': analysis.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'total_games': analysis.total_games,
+            'avg_mistakes': analysis.avg_mistakes,
+            'avg_blunders': analysis.avg_blunders,
+            'avg_centipawn_loss': analysis.avg_centipawn_loss,
+            'common_openings': analysis.common_openings,
+            'recommendations': [
+                {
+                    'opening': rec.opening.name,
+                    'explanation': rec.explanation,
+                    'key_ideas': rec.key_ideas,
+                    'pitfalls': rec.pitfalls
+                }
+                for rec in recommendations
+            ]
+        })
+    
+    return JsonResponse({
+        'status': 'success',
+        'history': history
+    })
+
+@login_required
+def analyze_games_view(request):
+    """View for the game analysis and opening recommendations page."""
+    return render(request, 'chess_app/analyze_games.html')
+
+@login_required
+def upload_pgn(request):
+    """View for uploading and analyzing PGN files."""
+    if request.method == 'POST':
+        # Handle form submission via AJAX in the template
+        return JsonResponse({'status': 'error', 'message': 'Use the API endpoint for file upload'})
+    
+    return render(request, 'chess_app/upload_pgn.html')
+
+def get_opening_moves_from_ai(opening_name):
+    """Get the main line moves for an opening using AI."""
+    try:
+        prompt = (
+            f"You are a chess opening expert. Please provide the main line moves for the {opening_name} opening. "
+            "Return ONLY the moves in PGN format (e.g., '1. e4 e5 2. Nf3 Nc6'). "
+            "Do not include any other text or explanation. "
+            "Provide only the most standard main line variation."
+        )
+
+        completion = client.chat.completions.create(
+            extra_body={},
+            model="google/gemini-2.0-flash-001",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        # Get the moves from the completion
+        moves = completion.choices[0].message.content.strip()
+        return moves
+    except Exception as e:
+        logger.error(f"Error getting opening moves from AI: {e}")
+        return ""
