@@ -1,0 +1,162 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block title %}Upload PGN - Chessary{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Upload Chess Games (PGN)</h4>
+                </div>
+                <div class="card-body">
+                    <form id="pgn-upload-form" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        
+                        <!-- File Upload Section -->
+                        <div class="mb-4">
+                            <label for="pgn-file" class="form-label">Choose PGN File</label>
+                            <div class="input-group">
+                                <input type="file" class="form-control" id="pgn-file" name="pgn_file" accept=".pgn" required>
+                                <div class="invalid-feedback">
+                                    Please select a PGN file.
+                                </div>
+                            </div>
+                            <small class="text-muted">Upload your chess games in PGN format (max size: 5MB)</small>
+                        </div>
+
+                        <!-- Text Area for Direct PGN Input -->
+                        <div class="mb-4">
+                            <label for="pgn-text" class="form-label">Or Paste PGN Text</label>
+                            <textarea class="form-control" id="pgn-text" name="pgn_text" rows="6" placeholder="Paste your PGN text here..."></textarea>
+                            <small class="text-muted">You can either upload a file or paste the PGN text directly</small>
+                        </div>
+
+                        <!-- Analysis Options -->
+                        <div class="mb-4">
+                            <h5>Analysis Options</h5>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="analyze-openings" name="analyze_openings" checked>
+                                <label class="form-check-label" for="analyze-openings">
+                                    Analyze openings and suggest improvements
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="analyze-tactics" name="analyze_tactics" checked>
+                                <label class="form-check-label" for="analyze-tactics">
+                                    Find tactical opportunities and mistakes
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="generate-report" name="generate_report" checked>
+                                <label class="form-check-label" for="generate-report">
+                                    Generate detailed analysis report
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-upload me-2"></i>Upload and Analyze
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Progress Section (Initially Hidden) -->
+            <div id="analysis-progress" class="card mt-4 d-none">
+                <div class="card-body">
+                    <h5 class="card-title">Analysis Progress</h5>
+                    <div class="progress mb-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p id="progress-status" class="text-center">Preparing analysis...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    const form = $('#pgn-upload-form');
+    const progressSection = $('#analysis-progress');
+    const progressBar = $('.progress-bar');
+    const progressStatus = $('#progress-status');
+
+    // Form validation
+    form.on('submit', function(e) {
+        e.preventDefault();
+        
+        if (!form[0].checkValidity()) {
+            e.stopPropagation();
+            form.addClass('was-validated');
+            return;
+        }
+
+        // Show progress section
+        progressSection.removeClass('d-none');
+        
+        // Create FormData object
+        const formData = new FormData(this);
+        formData.append('source', 'PGN');
+
+        // Send AJAX request
+        $.ajax({
+            url: '{% url "api_analyze_games" %}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            xhr: function() {
+                const xhr = new window.XMLHttpRequest();
+                xhr.upload.addEventListener('progress', function(e) {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        progressBar.css('width', percent + '%');
+                        progressStatus.text('Uploading: ' + percent + '%');
+                    }
+                }, false);
+                return xhr;
+            },
+            success: function(response) {
+                progressBar.css('width', '100%');
+                progressStatus.text('Analysis complete!');
+                
+                // Redirect to analysis results page
+                window.location.href = '/analyze/?analysis_id=' + response.analysis_id;
+            },
+            error: function(xhr, status, error) {
+                progressSection.addClass('alert alert-danger');
+                progressStatus.text('Error: ' + (xhr.responseJSON?.message || 'Failed to analyze games'));
+            }
+        });
+    });
+
+    // Handle file input change
+    $('#pgn-file').on('change', function() {
+        const file = this.files[0];
+        if (file) {
+            $('#pgn-text').prop('disabled', true);
+        } else {
+            $('#pgn-text').prop('disabled', false);
+        }
+    });
+
+    // Handle text input change
+    $('#pgn-text').on('input', function() {
+        if ($(this).val()) {
+            $('#pgn-file').prop('disabled', true);
+        } else {
+            $('#pgn-file').prop('disabled', false);
+        }
+    });
+});
+</script>
+{% endblock %} 

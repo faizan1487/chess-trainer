@@ -161,3 +161,57 @@ class UserChallenge(models.Model):
     def __str__(self):
         status = "Solved" if self.is_solved else "Unsolved"
         return f"{self.user.username} - {self.challenge.title} ({status})"
+
+class GameAnalysis(models.Model):
+    """Model for storing analyzed games and their statistics."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    source = models.CharField(
+        max_length=50,
+        choices=[
+            ('PGN', 'PGN Upload'),
+            ('LICHESS', 'Lichess'),
+            ('CHESS_COM', 'Chess.com')
+        ]
+    )
+    source_identifier = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Username for chess platforms or filename for PGN"
+    )
+    
+    # Game statistics
+    total_games = models.IntegerField(default=0)
+    avg_mistakes = models.FloatField(default=0.0)
+    avg_blunders = models.FloatField(default=0.0)
+    avg_centipawn_loss = models.FloatField(default=0.0)
+    
+    # Opening statistics
+    common_openings = models.JSONField(
+        default=dict,
+        help_text="Most commonly played openings and their statistics"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        
+    def __str__(self):
+        return (
+            f"Analysis for {self.user.username} from {self.source} "
+            f"({self.created_at.strftime('%Y-%m-%d')})"
+        )
+
+class OpeningRecommendation(models.Model):
+    """Model for storing opening recommendations."""
+    analysis = models.ForeignKey(GameAnalysis, on_delete=models.CASCADE)
+    opening = models.ForeignKey(Opening, on_delete=models.CASCADE)
+    explanation = models.TextField()
+    key_ideas = models.JSONField()
+    pitfalls = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        
+    def __str__(self):
+        return f"{self.opening.name} recommendation for {self.analysis.user.username}"

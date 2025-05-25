@@ -9,6 +9,8 @@ import logging
 from django.conf import settings
 import re
 from openai import OpenAI
+import io
+import json
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -951,3 +953,225 @@ class FeedbackGenerator:
             return f"Instead, {best_move['san']} would be much stronger and maintain your advantage."
         else:  # blunder
             return f"{best_move['san']} would be much stronger. Always check for tactics before making your move." 
+
+class GameAnalyzer:
+    """Service for analyzing chess games and generating personalized opening recommendations."""
+    
+    def __init__(self):
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=getattr(settings, 'OPENAI_API_KEY', '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')
+        )
+        self.stockfish = StockfishEngine()
+    
+    def analyze_games_from_pgn(self, pgn_data):
+        """
+        Analyze multiple games from a PGN file.
+        Returns a list of analyzed games with statistics.
+        """
+        games = []
+        pgn_io = io.StringIO(pgn_data)
+        
+        while True:
+            print("reading game")
+            game = chess.pgn.read_game(pgn_io)
+            if game is None:
+                break
+                
+            analysis = self._analyze_single_game(game)
+            if analysis:
+                games.append(analysis)
+                
+        return games
+    
+    def _analyze_single_game(self, game):
+        print("analyzing single game")
+        """Analyze a single game and extract relevant statistics."""
+        try:
+            # Extract basic game info
+            white = game.headers.get("White", "Unknown")
+            black = game.headers.get("Black", "Unknown")
+            result = game.headers.get("Result", "*")
+            opening = game.headers.get("Opening", "")
+            eco = game.headers.get("ECO", "")
+            
+            # Initialize statistics
+            stats = {
+                "white": white,
+                "black": black,
+                "result": result,
+                "opening": opening,
+                "eco": eco,
+                "total_moves": 0,
+                "avg_centipawn_loss": 0,
+                "mistakes": 0,
+                "blunders": 0,
+                "opening_moves": [],
+                "player_color": "white" if white == game.headers.get("White") else "black"
+            }
+            
+            # Analyze moves
+            board = game.board()
+            total_eval_diff = 0
+            move_count = 0
+            
+            for node in game.mainline():
+                move = node.move
+                move_san = board.san(move)
+                
+                # Get position evaluation before move
+                eval_before = self.stockfish.evaluate_position(board.fen())
+                
+                # Make the move
+                board.push(move)
+                
+                # Get position evaluation after move
+                eval_after = self.stockfish.evaluate_position(board.fen())
+                
+                # Calculate evaluation difference
+                eval_diff = abs(eval_after - eval_before)
+                total_eval_diff += eval_diff
+                
+                # Track mistakes and blunders
+                if eval_diff > 2:
+                    stats["blunders"] += 1
+                elif eval_diff > 1:
+                    stats["mistakes"] += 1
+                
+                # Store opening moves (first 10 moves)
+                if move_count < 20:  # 10 full moves
+                    stats["opening_moves"].append(move_san)
+                
+                move_count += 1
+            
+            stats["total_moves"] = move_count
+            stats["avg_centipawn_loss"] = total_eval_diff / move_count if move_count > 0 else 0
+            
+            return stats
+        except Exception as e:
+            logger.error(f"Error analyzing game: {e}")
+            return None
+    
+    def get_opening_recommendations(self, analyzed_games, user_rating=None):
+        """
+        Generate personalized opening recommendations based on analyzed games.
+        Uses Gemini to provide context-aware suggestions.
+        """
+        try:
+            print("getting opening recommendations")
+            # Prepare game analysis summary
+            games_summary = []
+            for game in analyzed_games:
+                summary = {
+                    "opening_played": game["opening"],
+                    "result": game["result"],
+                    "mistakes": game["mistakes"],
+                    "blunders": game["blunders"],
+                    "avg_centipawn_loss": game["avg_centipawn_loss"],
+                    "color": game["player_color"]
+                }
+                # print("summary: ", summary)
+                games_summary.append(summary)
+            # print("games_summary: ", games_summary)
+            # Create prompt for Gemini
+            prompt = f"""
+            You are a chess expert. Based on the following chess game analysis, recommend 2-3 chess openings that would suit the player's style and skill level.
+            
+            Game Analysis Summary:
+            {json.dumps(games_summary, indent=2)}
+            
+            Player Rating: {user_rating if user_rating else 'Unknown'}
+            
+            Consider the following factors:
+            1. Win/loss ratio with different openings
+            2. Mistake and blunder frequency
+            3. Average centipawn loss
+            4. Player's apparent playing style (aggressive/positional)
+            5. Player's experience level
+            
+            For each recommended opening, provide:
+            1. Opening name
+            2. Brief explanation of why it suits the player
+            3. Key ideas and typical plans
+            4. Potential traps or pitfalls to watch out for
+            
+            IMPORTANT: Your response MUST be in valid JSON format with this exact structure:
+            {{
+                "recommendations": [
+                    {{
+                        "name": "Opening Name",
+                        "explanation": "Why it suits the player",
+                        "key_ideas": ["idea1", "idea2"],
+                        "pitfalls": ["pitfall1", "pitfall2"]
+                    }}
+                ]
+            }}
+            
+            Do not include any text outside of the JSON structure. The response must be parseable by json.loads().
+            """
+            # print("prompt: ", prompt)
+            
+            # Get recommendations from Gemini
+            completion = self.client.chat.completions.create(
+                model="google/gemini-2.0-flash-001",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            # print("completion: ", completion)
+            
+            try:
+                # Get the response content and clean it
+                response_text = completion.choices[0].message.content.strip()
+                
+                # Remove markdown code blocks if present
+                if response_text.startswith('```json'):
+                    response_text = response_text[7:]  # Remove ```json prefix
+                if response_text.startswith('```'):
+                    response_text = response_text[3:]  # Remove ``` prefix
+                if response_text.endswith('```'):
+                    response_text = response_text[:-3]  # Remove ``` suffix
+                
+                # Strip any remaining whitespace and try to parse
+                response_text = response_text.strip()
+                # print("cleaned response: ", response_text)
+                
+                # Try to parse the JSON response
+                recommendations = json.loads(response_text)
+                if "recommendations" in recommendations:
+                    return recommendations["recommendations"]
+                else:
+                    # If response doesn't have the expected structure, return a default recommendation
+                    return [{
+                        "name": "Italian Game",
+                        "explanation": "A solid opening that helps develop fundamental chess principles",
+                        "key_ideas": ["Control the center", "Develop pieces quickly", "Create attacking chances"],
+                        "pitfalls": ["Don't move the same piece twice", "Watch for enemy counterplay"]
+                    }]
+            except json.JSONDecodeError:
+                logger.error("Failed to parse Gemini response as JSON")
+                # Return a default recommendation
+                return [{
+                    "name": "Italian Game",
+                    "explanation": "A solid opening that helps develop fundamental chess principles",
+                    "key_ideas": ["Control the center", "Develop pieces quickly", "Create attacking chances"],
+                    "pitfalls": ["Don't move the same piece twice", "Watch for enemy counterplay"]
+                }]
+            
+        except Exception as e:
+            logger.error(f"Error generating opening recommendations: {e}")
+            # Return a default recommendation
+            return [{
+                "name": "Italian Game",
+                "explanation": "A solid opening that helps develop fundamental chess principles",
+                "key_ideas": ["Control the center", "Develop pieces quickly", "Create attacking chances"],
+                "pitfalls": ["Don't move the same piece twice", "Watch for enemy counterplay"]
+            }]
+    
+    def analyze_lichess_games(self, username):
+        """Analyze games from a Lichess account."""
+        # TODO: Implement Lichess API integration
+        pass
+    
+    def analyze_chess_com_games(self, username):
+        """Analyze games from a Chess.com account."""
+        # TODO: Implement Chess.com API integration
+        pass 
