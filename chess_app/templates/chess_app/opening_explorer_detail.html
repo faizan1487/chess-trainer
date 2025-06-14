@@ -44,203 +44,323 @@
         justify-content: space-between;
         margin-bottom: 5px;
     }
+    .variation-card {
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+        cursor: pointer;
+    }
+    .variation-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .lesson-card {
+        margin-bottom: 15px;
+        border-left: 4px solid #28a745;
+    }
+    .sidebar {
+        background: #f8f9fa;
+        min-height: 100vh;
+        border-right: 1px solid #e0e0e0;
+        padding-top: 20px;
+    }
+    .variation-group-title {
+        font-weight: bold;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+    .variation-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        margin-bottom: 0.25rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        text-decoration: none;
+        color: #212529;
+    }
+    .variation-link.active, .variation-link:hover {
+        background: #e3f2fd;
+        color: #1976d2;
+        text-decoration: none;
+    }
+    .variation-progress {
+        font-size: 0.85rem;
+        color: #28a745;
+        margin-left: 0.5rem;
+    }
+    .main-board-area {
+        padding: 2rem 2rem 2rem 2rem;
+    }
+    .move-explanation {
+        background: #f1f8e9;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+        min-height: 120px;
+    }
+    .move-list {
+        margin-top: 1rem;
+        font-size: 1.1rem;
+    }
+    .move-list .current-move {
+        background: #ffe082;
+        border-radius: 4px;
+        padding: 0.2rem 0.5rem;
+        font-weight: bold;
+    }
+    .move-nav-btns {
+        margin-top: 1rem;
+    }
+    @media (max-width: 991px) {
+        .main-board-area {
+            padding: 1rem 0.5rem;
+        }
+        .sidebar {
+            min-height: auto;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{% url 'opening_explorer' %}">Opening Explorer</a></li>
-                <li class="breadcrumb-item active" aria-current="page">{{ opening.name }}</li>
-            </ol>
-        </nav>
-        
-        <h1>{{ opening.name }} <small class="text-muted">{{ opening.eco_code }}</small></h1>
-        
-        <!-- Progress Bar -->
-        {% if progress %}
-        <div class="progress-container">
-            <div class="progress-label">
-                <span>Opening Mastery</span>
-                <span>{{ progress.mastery_level }}%</span>
-            </div>
-            <div class="progress">
-                <div class="progress-bar bg-success" role="progressbar" 
-                     style="width: {{ progress.mastery_level }}%" 
-                     aria-valuenow="{{ progress.mastery_level }}" aria-valuemin="0" aria-valuemax="100">
+<div class="container-fluid">
+    <div class="row">
+        <!-- Lessons Sidebar: Collapsible, Progress-Driven Navigation -->
+        <nav class="col-lg-3 col-md-4 sidebar" id="lessons-sidebar">
+            <h4>Available Lessons</h4>
+            <div class="accordion" id="lessonsAccordion">
+                {% if opening.lessons.all %}
+                    {% for lesson in opening.lessons.all %}
+                        <div class="accordion-item mb-2">
+                            <h2 class="accordion-header" id="heading{{ lesson.id }}">
+                                <button class="accordion-button collapsed d-flex align-items-center justify-content-between" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ lesson.id }}" aria-expanded="false" aria-controls="collapse{{ lesson.id }}">
+                                    <span>{{ lesson.name }}</span>
+                                    <span class="ms-auto d-flex align-items-center">
+                                        {% if lesson.progress and lesson.progress.completed %}
+                                            <span class="badge bg-success me-2">&#10003;</span>
+                                        {% endif %}
+                                        <span class="progress-circle" data-progress="{{ lesson.progress|default:0 }}">
+                                            <svg width="28" height="28">
+                                                <circle cx="14" cy="14" r="12" stroke="#e0e0e0" stroke-width="4" fill="none" />
+                                                <circle cx="14" cy="14" r="12" stroke="#28a745" stroke-width="4" fill="none" stroke-dasharray="75.4" stroke-dashoffset="75.4" />
+                                            </svg>
+                                            <span class="progress-text">{{ lesson.progress|default:0 }}%</span>
+                                        </span>
+                                    </span>
+                                </button>
+                            </h2>
+                            <div id="collapse{{ lesson.id }}" class="accordion-collapse collapse" aria-labelledby="heading{{ lesson.id }}" data-bs-parent="#lessonsAccordion">
+                                <div class="accordion-body">
+                                    <p class="small mb-2">{{ lesson.description|truncatewords:18 }}</p>
+                                    <button class="btn btn-success btn-sm w-100 load-lesson-btn" data-lesson-id="{{ lesson.id }}">Start Lesson</button>
                 </div>
             </div>
         </div>
-        {% endif %}
-        
-        <div class="mb-4">
-            <p class="lead">{{ opening.description }}</p>
-            <div class="d-flex mb-3">
-                <span class="badge {% if opening.for_white %}bg-light text-dark{% else %}bg-dark text-white{% endif %} me-2">
-                    Playing as {% if opening.for_white %}White{% else %}Black{% endif %}
-                </span>
-                <span class="badge bg-info me-2">
-                    Difficulty: {{ opening.difficulty }}/5
-                </span>
-                {% if opening.is_popular %}
-                <span class="badge bg-success">
-                    Popular
-                </span>
+                    {% endfor %}
+                {% else %}
+                    <div class="alert alert-info mb-0">
+                        No lessons available for this opening yet.
+                    </div>
                 {% endif %}
+                <!-- Collapsible variations as sub-items -->
+                {% for variation in opening.variations.all %}
+                    <div class="accordion-item mb-2">
+                        <h2 class="accordion-header" id="heading-var-{{ variation.id }}">
+                            <button class="accordion-button collapsed d-flex align-items-center justify-content-between" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-var-{{ variation.id }}" aria-expanded="false" aria-controls="collapse-var-{{ variation.id }}">
+                                <span>{{ variation.name }}</span>
+                            </button>
+                        </h2>
+                        <div id="collapse-var-{{ variation.id }}" class="accordion-collapse collapse" aria-labelledby="heading-var-{{ variation.id }}" data-bs-parent="#lessonsAccordion">
+                            <div class="accordion-body">
+                                {% if variation.lessons.all %}
+                                    {% for vlesson in variation.lessons.all %}
+                                        <div class="mb-2">
+                                            <span>{{ vlesson.name }}</span>
+                                            <button class="btn btn-success btn-sm w-100 load-lesson-btn mt-1" data-lesson-id="{{ vlesson.id }}">Start Lesson</button>
             </div>
-            <a href="{% url 'game' opening.id %}" class="btn btn-primary">Train This Opening</a>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <!-- Chess Board Column -->
-    <div class="col-md-6">
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5>Interactive Board</h5>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="alert alert-info mb-0">
+                                        No lessons available for this variation yet.
             </div>
-            <div class="card-body">
-                <div id="explorer-board" class="chessboard"></div>
-                <div class="mt-3 text-center">
-                    <button id="prev-position" class="btn btn-secondary">Previous</button>
-                    <button id="next-position" class="btn btn-primary">Next</button>
-                    <button id="flip-board" class="btn btn-outline-secondary">Flip Board</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Positions Column -->
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Key Positions</h5>
-            </div>
-            <div class="card-body">
-                <div id="positions-container">
-                    {% for position in positions %}
-                    <div class="card position-card {% if position.is_critical %}critical-position{% endif %}" data-fen="{{ position.fen }}" data-index="{{ forloop.counter0 }}">
-                        <div class="card-body">
-                            <h6 class="card-title">Position {{ forloop.counter }}</h6>
-                            {% if position.move %}
-                            <p class="card-text">
-                                Move: <span class="position-move">{{ position.move }}</span>
-                            </p>
-                            {% else %}
-                            <p class="card-text">
-                                <i>Initial position</i>
-                            </p>
                             {% endif %}
-                            {% if position.comment %}
-                            <div class="position-annotation">
-                                {{ position.comment }}
+                                <a href="{% url 'opening_explorer_detail' variation.id %}" class="btn btn-outline-primary btn-sm mt-2 w-100">Explore {{ variation.name }}</a>
                             </div>
-                            {% endif %}
                         </div>
                     </div>
-                    {% empty %}
-                    <div class="alert alert-info">
-                        No detailed positions available for this opening.
+                {% endfor %}
+            </div>
+        </nav>
+        <!-- Center: Chessboard (always visible) -->
+        <main class="col-lg-6 col-md-6 main-board-area d-flex flex-column align-items-center justify-content-center">
+            <div class="card mb-3 w-100">
+                <div class="card-body">
+                    <div id="explorer-board" class="chessboard mx-auto"></div>
+                    <div class="move-nav-btns text-center mt-3">
+                        <button id="prev-position" class="btn btn-secondary me-2">Previous</button>
+                        <button id="next-position" class="btn btn-primary me-2">Next</button>
+                        <button id="flip-board" class="btn btn-outline-secondary">Flip Board</button>
                     </div>
-                    {% endfor %}
                 </div>
             </div>
+            <div class="move-list text-center">
+                <!-- Moves will be dynamically inserted here -->
+            </div>
+            <div class="move-explanation mt-3">
+                <!-- Move explanation will be dynamically inserted here -->
         </div>
+        </main>
+        <!-- Right: Lesson Details Panel -->
+        <aside class="col-lg-3 col-md-4" id="lesson-detail-panel" style="min-height: 400px;">
+            <div id="lesson-content-placeholder" class="text-muted text-center mt-5">Select a lesson to view details.</div>
+            <div id="lesson-content" style="display:none;"></div>
+        </aside>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+{{ move_list|json_script:"move-list-data" }}
 <script>
+    // Set progress circle offsets
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.progress-circle').forEach(function(circle) {
+            var progress = parseFloat(circle.getAttribute('data-progress')) || 0;
+            var offset = 75.4 - (progress * 75.4 / 100);
+            var svgCircle = circle.querySelector('circle[stroke="#28a745"]');
+            if (svgCircle) {
+                svgCircle.setAttribute('stroke-dashoffset', offset);
+            }
+        });
+    });
+    // Dynamic lesson loading
+    $(document).on('click', '.load-lesson-btn', function() {
+        var lessonId = $(this).data('lesson-id');
+        // Show loading spinner in right panel
+        $('#lesson-content-placeholder').hide();
+        $('#lesson-content').html('<div class="text-center my-5"><div class="spinner-border text-success" role="status"><span class="visually-hidden">Loading...</span></div></div>').show();
+        // Fetch lesson detail HTML
+        $.get('/lesson/' + lessonId + '/?embedded=1', function(data) {
+            $('#lesson-content').html(data).show();
+        });
+    });
+    // Remove logic that hides/shows the board/main content on lesson load.
+    $(document).on('click', '#back-to-explorer', function() {
+        $('#lesson-content').hide().empty();
+        $('#lesson-content-placeholder').show();
+    });
+    // Pass move_list from Django to JS
+    const moveList = JSON.parse(document.getElementById('move-list-data').textContent);
+    let currentMoveIndex = 0;
+    let board = null;
+    let game = null;
+
+    function updateNavButtons() {
+        $('#prev-position').prop('disabled', currentMoveIndex === 0);
+        $('#next-position').prop('disabled', currentMoveIndex === moveList.length - 1);
+    }
+
+    function renderBoardAndInfo() {
+        if (!moveList.length) return;
+        let fen;
+        if (currentMoveIndex === 0) {
+            fen = moveList[0].position_before;
+        } else {
+            fen = moveList[currentMoveIndex].position_after;
+        }
+        board.position(fen);
+        // Render move list
+        let movesHtml = '';
+        moveList.forEach((move, idx) => {
+            movesHtml += `<span class="${idx === currentMoveIndex ? 'current-move' : ''}">${move.move_san}</span> `;
+        });
+        document.querySelector('.move-list').innerHTML = movesHtml;
+        // Render explanation
+        const explanation = moveList[currentMoveIndex]?.explanation || '';
+        document.querySelector('.move-explanation').innerText = explanation;
+        updateNavButtons();
+    }
+
     $(document).ready(function() {
-        // Initialize positions array
-        const positions = [
-            {% for position in positions %}
-                {
-                    fen: "{{ position.fen }}",
-                    move: "{{ position.move }}",
-                    comment: "{{ position.comment|escapejs }}"
-                }{% if not forloop.last %},{% endif %}
-            {% endfor %}
-        ];
-        
-        // Current position index
-        let currentIndex = 0;
-        
-        // Initialize chess board
-        let board = null;
-        
-        // Board configuration
-        const boardConfig = {
-            position: positions.length > 0 ? positions[0].fen : 'start',
-            showNotation: true,
-            draggable: false  // No dragging in explorer mode
-        };
-        
-        // Initialize the board
-        board = Chessboard('explorer-board', boardConfig);
-        
-        // Highlight the first position card
-        $('.position-card[data-index="0"]').addClass('active');
-        
-        // Handle position card click
-        $('.position-card').on('click', function() {
-            const index = $(this).data('index');
-            showPosition(index);
+        board = Chessboard('explorer-board', {
+            position: moveList.length ? moveList[0].position_before : 'start',
+            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
         });
-        
-        // Previous position button
-        $('#prev-position').on('click', function() {
-            if (currentIndex > 0) {
-                showPosition(currentIndex - 1);
+        game = new Chess(moveList.length ? moveList[0].position_before : undefined);
+
+        let selectedSquare = null;
+        let highlightedSquares = [];
+
+        function removeHighlights() {
+            highlightedSquares.forEach(sq => {
+                $(`.square-${sq}`).removeClass('square-highlight');
+            });
+            highlightedSquares = [];
+        }
+
+        function highlightSquares(squares) {
+            squares.forEach(sq => {
+                $(`.square-${sq}`).addClass('square-highlight');
+            });
+            highlightedSquares = squares;
+        }
+
+        // Add CSS for highlight
+        if (!$('style#click-move-highlight').length) {
+            $('<style id="click-move-highlight">.square-highlight { box-shadow: 0 0 0 3px #ffc107 inset; border: 2px dotted #ffc107 !important; z-index: 2; }</style>').appendTo('head');
+        }
+
+        // Click-to-move logic
+        $('#explorer-board').on('click', '.square-55d63', function() {
+            const square = $(this).data('square');
+            if (!selectedSquare) {
+                // Select piece if it exists and is the current turn
+                const piece = game.get(square);
+                if (piece && piece.color === game.turn()) {
+                    selectedSquare = square;
+                    // Highlight valid moves
+                    const moves = game.moves({ square: square, verbose: true });
+                    const destSquares = moves.map(m => m.to);
+                    highlightSquares(destSquares);
+                }
+            } else {
+                // Try to make the move
+                const move = game.move({ from: selectedSquare, to: square });
+                if (move) {
+                    board.position(game.fen());
+                }
+                removeHighlights();
+                selectedSquare = null;
             }
         });
-        
-        // Next position button
-        $('#next-position').on('click', function() {
-            if (currentIndex < positions.length - 1) {
-                showPosition(currentIndex + 1);
+
+        // Navigation
+        $('#next-position').click(function() {
+            if (currentMoveIndex < moveList.length - 1) {
+                currentMoveIndex++;
+                renderBoardAndInfo();
+                game = new Chess(moveList[currentMoveIndex].position_after);
             }
         });
-        
-        // Flip board button
-        $('#flip-board').on('click', function() {
+        $('#prev-position').click(function() {
+            if (currentMoveIndex > 0) {
+                currentMoveIndex--;
+                renderBoardAndInfo();
+                game = new Chess(moveList[currentMoveIndex].position_after);
+            }
+        });
+        $('#flip-board').click(function() {
             board.flip();
         });
-        
-        // Show a specific position
-        function showPosition(index) {
-            if (index >= 0 && index < positions.length) {
-                currentIndex = index;
-                board.position(positions[index].fen);
-                
-                // Update active card
-                $('.position-card').removeClass('active');
-                $(`.position-card[data-index="${index}"]`).addClass('active');
-                
-                // Scroll to the card
-                const card = $(`.position-card[data-index="${index}"]`);
-                const container = $('#positions-container');
-                container.animate({
-                    scrollTop: card.offset().top - container.offset().top + container.scrollTop()
-                }, 300);
-                
-                // Update button states
-                updateButtonStates();
-            }
-        }
-        
-        // Update button states based on current position
-        function updateButtonStates() {
-            $('#prev-position').prop('disabled', currentIndex === 0);
-            $('#next-position').prop('disabled', currentIndex === positions.length - 1);
-        }
-        
-        // Initial button state update
-        updateButtonStates();
+        // Initial render
+        renderBoardAndInfo();
+        // Responsive
+        $(window).resize(function() {
+            board.resize();
+        });
     });
 </script>
 {% endblock %} 

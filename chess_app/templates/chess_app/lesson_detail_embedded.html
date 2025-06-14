@@ -1,0 +1,158 @@
+<div class="lesson-embedded-container p-3">
+    <button id="back-to-explorer" class="btn btn-outline-secondary mb-3">&larr; Back to Explorer</button>
+    <h2>{{ lesson.name }}</h2>
+    <p class="lead">{{ lesson.description }}</p>
+    <div id="game-board" class="chessboard mb-3"></div>
+    <div id="quiz-section" style="margin-top: 20px;">
+        <div id="move-prompt" class="mb-2"></div>
+        <div id="quiz-choices" class="mb-2"></div>
+        <div id="quiz-feedback" class="move-feedback" style="display:none;"></div>
+        <div id="move-explanation" class="move-explanation"></div>
+        <div class="progress my-3" id="quiz-progress-bar" style="height: 18px;">
+          <div class="progress-bar bg-info" role="progressbar" style="width: 0%" id="quiz-progress"
+               aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div id="quiz-move-history" class="mt-3"></div>
+        <button id="show-hint" class="btn btn-info mt-2">Show Hint</button>
+    </div>
+</div>
+<script>
+// JS logic (same as in lesson_detail.html, but ensure it works in this partial context)
+const moves = {{ moves|safe }};
+let currentMove = 0;
+let board = null;
+let game = new Chess(moves[0].position_before);
+let missedMoves = [];
+const positiveMessages = [
+    "Great job!", "Excellent!", "You're learning fast!", "Keep it up!", "Nice move!"
+];
+function getRandomPositive() {
+    return positiveMessages[Math.floor(Math.random() * positiveMessages.length)];
+}
+function updateQuizProgress() {
+    const percent = ((currentMove + 1) / moves.length) * 100;
+    document.getElementById('quiz-progress').style.width = percent + '%';
+    document.getElementById('quiz-progress').setAttribute('aria-valuenow', percent);
+}
+function updateMoveHistory() {
+    let history = '';
+    for (let i = 0; i <= currentMove; i++) {
+        history += `<span>${moves[i].move_san} </span>`;
+        if (moves[i].black_reply) history += `<span>${moves[i].black_reply} </span>`;
+    }
+    document.getElementById('quiz-move-history').innerHTML = history;
+}
+let selectedSquare = null;
+let validDestinations = [];
+function highlightSquares(squares) {
+    document.querySelectorAll('[data-square]').forEach(el => el.classList.remove('square-highlight'));
+    squares.forEach(sq => {
+        const el = document.querySelector(`[data-square='${sq}']`);
+        if (el) el.classList.add('square-highlight');
+    });
+}
+function clearHighlights() {
+    document.querySelectorAll('[data-square]').forEach(el => el.classList.remove('square-highlight', 'square-selected'));
+}
+function enableClickToMove() {
+    const boardEl = document.getElementById('game-board');
+    boardEl.removeEventListener('click', clickHandler, true);
+    boardEl.addEventListener('click', clickHandler, true);
+}
+function clickHandler(e) {
+    const square = e.target.getAttribute('data-square');
+    if (!square) return;
+    if (!selectedSquare) {
+        const piece = game.get(square);
+        if (piece && ((game.turn() === 'w' && piece.color === 'w') || (game.turn() === 'b' && piece.color === 'b'))) {
+            selectedSquare = square;
+            e.target.classList.add('square-selected');
+            validDestinations = game.moves({ square: square, verbose: true }).map(m => m.to);
+            highlightSquares(validDestinations);
+        }
+    } else {
+        if (validDestinations.includes(square)) {
+            const move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
+            if (move) {
+                board.position(game.fen());
+                clearHighlights();
+                selectedSquare = null;
+                validDestinations = [];
+                handleUserMove(move.from + move.to);
+                return;
+            }
+        }
+        clearHighlights();
+        selectedSquare = null;
+        validDestinations = [];
+    }
+}
+function handleUserMove(userMoveUci) {
+    const moveObj = moves[currentMove];
+    if (userMoveUci === moveObj.move_uci) {
+        document.getElementById('quiz-feedback').textContent = getRandomPositive() + ' Correct!';
+        document.getElementById('quiz-feedback').classList.remove('incorrect');
+        document.getElementById('quiz-feedback').classList.add('correct');
+        document.getElementById('quiz-feedback').style.display = '';
+        if (moveObj.black_reply) {
+            setTimeout(() => {
+                game.move(moveObj.black_reply);
+                board.position(game.fen());
+                document.getElementById('move-explanation').textContent = moveObj.explanation;
+                document.getElementById('move-explanation').style.display = '';
+                setTimeout(() => {
+                    if (currentMove < moves.length - 1) {
+                        currentMove++;
+                        renderMove();
+                    } else {
+                        document.getElementById('move-prompt').textContent = 'Lesson complete!';
+                    }
+                }, 1200);
+            }, 800);
+        } else {
+            setTimeout(() => {
+                if (currentMove < moves.length - 1) {
+                    currentMove++;
+                    renderMove();
+                } else {
+                    document.getElementById('move-prompt').textContent = 'Lesson complete!';
+                }
+            }, 800);
+        }
+    } else {
+        document.getElementById('quiz-feedback').textContent = 'Try again!';
+        document.getElementById('quiz-feedback').classList.remove('correct');
+        document.getElementById('quiz-feedback').classList.add('incorrect');
+        document.getElementById('quiz-feedback').style.display = '';
+        game.undo();
+        board.position(game.fen());
+    }
+}
+function renderMove() {
+    const move = moves[currentMove];
+    document.getElementById('move-prompt').textContent = move.prompt || `Your move (${move.move_san})`;
+    document.getElementById('quiz-feedback').style.display = 'none';
+    document.getElementById('move-explanation').style.display = 'none';
+    document.getElementById('quiz-choices').innerHTML = '';
+    document.getElementById('move-explanation').textContent = '';
+    board.position(move.position_before);
+    game = new Chess(move.position_before);
+    updateQuizProgress();
+    updateMoveHistory();
+    clearHighlights();
+}
+document.addEventListener('DOMContentLoaded', function() {
+    board = Chessboard('game-board', {
+        position: moves[0].position_before,
+        draggable: false,
+        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+    });
+    renderMove();
+    enableClickToMove();
+    document.getElementById('show-hint').addEventListener('click', function() {
+        const move = moves[currentMove];
+        document.getElementById('move-explanation').textContent = move.explanation;
+        document.getElementById('move-explanation').style.display = '';
+    });
+});
+</script> 

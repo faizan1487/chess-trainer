@@ -364,7 +364,7 @@ class ChessNLP:
         }
     
     def analyze_message(self, message, board_fen=None, opening=None):
-        # print("analyze message called")
+        print("analyze message called")
         # Compose a prompt for Gemini
         prompt = (
             "Classify the user's intent as one of: opening_info, move_analysis, general, greeting, hint, or other.\n"
@@ -686,6 +686,7 @@ class FeedbackGenerator:
         )
     
     def _generate_ai_feedback(self, board_fen, move_uci, classification, stockfish_analysis, opening=None):
+        print("generate ai feedback called")
         """
         Generate feedback using AI based on Stockfish analysis and move context.
         """

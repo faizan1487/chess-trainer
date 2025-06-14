@@ -1,0 +1,107 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block title %}Chess Opening Lessons{% endblock %}
+
+{% block extra_css %}
+<style>
+    .lesson-card {
+        transition: transform 0.2s;
+        margin-bottom: 20px;
+    }
+    .lesson-card:hover {
+        transform: translateY(-5px);
+    }
+    .progress-bar {
+        height: 10px;
+        border-radius: 5px;
+    }
+    .lesson-status {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    .lesson-difficulty {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+    }
+    .lesson-stats {
+        font-size: 0.9em;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Chess Opening Lessons</h1>
+    
+    <div class="row">
+        {% for lesson in lessons %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card lesson-card h-100">
+                    {% if lesson.id in user_progress %}
+                        {% with progress=user_progress|get:lesson.id %}
+                            <div class="lesson-status">
+                                {% if progress.completed %}
+                                    <span class="badge bg-success">Completed</span>
+                                {% else %}
+                                    <span class="badge bg-primary">In Progress</span>
+                                {% endif %}
+                            </div>
+                        {% endwith %}
+                    {% endif %}
+                    
+                    <div class="lesson-difficulty">
+                        <span class="badge {% if lesson.difficulty == 1 %}bg-success{% elif lesson.difficulty == 2 %}bg-warning{% else %}bg-danger{% endif %}">
+                            {{ lesson.get_difficulty_display }}
+                        </span>
+                    </div>
+                    
+                    <div class="card-body">
+                        <h5 class="card-title">{{ lesson.name }}</h5>
+                        <p class="card-text">{{ lesson.description|truncatewords:30 }}</p>
+                        
+                        {% if lesson.id in user_progress %}
+                            {% with progress=user_progress|get:lesson.id %}
+                                <div class="lesson-stats mb-3">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span>Progress:</span>
+                                        <span>{{ progress.moves_completed }} / {{ lesson.moves.count }} moves</span>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar" role="progressbar" 
+                                             style="width: {% widthratio progress.moves_completed lesson.moves.count 100 %}%"
+                                             aria-valuenow="{% widthratio progress.moves_completed lesson.moves.count 100 %}"
+                                             aria-valuemin="0" aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-between mt-2">
+                                        <span>Accuracy:</span>
+                                        <span>{{ progress.accuracy|floatformat:1 }}%</span>
+                                    </div>
+                                </div>
+                            {% endwith %}
+                        {% endif %}
+                        
+                        <a href="{% url 'lesson_detail' lesson.id %}" class="btn btn-primary">
+                            {% if lesson.id in user_progress %}
+                                Continue Lesson
+                            {% else %}
+                                Start Lesson
+                            {% endif %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% empty %}
+            <div class="col-12">
+                <div class="alert alert-info">
+                    No lessons available at the moment.
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %} 

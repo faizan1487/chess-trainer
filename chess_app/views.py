@@ -17,9 +17,12 @@ from django.contrib import messages
 from django.core.mail import send_mail
 from django.conf import settings
 from django import forms
+from django.utils import timezone
+from collections import defaultdict
+from django.core.serializers.json import DjangoJSONEncoder
 
 from .models import (
-    Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge
+    Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge, UserLessonProgress, LessonMove, MoveReview, AlternativeMove, TestResult
 )
 from .services import (
     StockfishEngine, ChessNLP, FeedbackGenerator, OpeningExplorer
@@ -52,7 +55,7 @@ def home(request):
 
 def opening_selection(request):
     """View to select a chess opening to practice."""
-    openings = Opening.objects.all().order_by('name')
+    openings = Opening.objects.filter(parent_opening__isnull=True).order_by('name')
     return render(
         request, 'chess_app/opening_selection.html', {'openings': openings}
     )  # noqa: E501
@@ -345,7 +348,27 @@ def opening_explorer(request, opening_id=None):
     """View to explore chess openings and their variations."""
     if opening_id:
         opening = get_object_or_404(Opening, id=opening_id)
-        positions = OpeningExplorer.get_opening_positions(opening.pgn_moves)
+        
+        # Get variations
+        variations = Opening.objects.filter(parent_opening=opening)
+        
+        # Group variations by category
+        grouped_variations = defaultdict(list)
+        for var in variations:
+            group = var.category or "Other"
+            var_progress = None
+            if request.user.is_authenticated:
+                user_prog = UserProgress.objects.filter(user=request.user, opening=var).first()
+                if user_prog:
+                    var_progress = user_prog.mastery_level
+            grouped_variations[group].append({
+                'id': var.id,
+                'name': var.name,
+                'progress': var_progress,
+            })
+        
+        # Get lessons for this opening
+        lessons = OpeningLesson.objects.filter(opening=opening, is_active=True).order_by('order')
         
         # Get user progress for this opening if it exists
         progress = None
@@ -355,14 +378,58 @@ def opening_explorer(request, opening_id=None):
                 opening=opening
             ).first()
         
+        # Prepare move list for the board and explanations
+        move_list = []
+        lesson = lessons.first() if lessons else None
+        if lesson:
+            # Use LessonMove if available
+            for move in LessonMove.objects.filter(lesson=lesson).order_by('move_number'):
+                move_list.append({
+                    'move_number': move.move_number,
+                    'move_san': move.move_san,
+                    'position_before': move.position_before,
+                    'position_after': move.position_after,
+                    'explanation': move.explanation,
+                })
+        else:
+            # Fallback: parse opening.pgn_moves
+            import chess.pgn, io
+            pgn = opening.pgn_moves
+            game = chess.pgn.read_game(io.StringIO(pgn))
+            board = chess.Board()
+            move_number = 1
+            node = game
+            while node.variations:
+                next_node = node.variation(0)
+                move = next_node.move
+                if move:
+                    move_san = board.san(move)
+                    position_before = board.fen()
+                    board.push(move)
+                    position_after = board.fen()
+                    move_list.append({
+                        'move_number': move_number,
+                        'move_san': move_san,
+                        'position_before': position_before,
+                        'position_after': position_after,
+                        'explanation': '',
+                    })
+                    move_number += 1
+                node = next_node
+        
+        # Convert grouped_variations to a regular dict for template compatibility
+        grouped_variations = dict(grouped_variations)
         return render(request, 'chess_app/opening_explorer_detail.html', {
             'opening': opening,
-            'positions': positions,
-            'progress': progress
+            'variations': variations,
+            'lessons': lessons,
+            'progress': progress,
+            'grouped_variations': grouped_variations,
+            'move_list': move_list
         })
     else:
         # List all openings
-        openings = Opening.objects.all().order_by('name')
+        openings = Opening.objects.filter(parent_opening__isnull=True).order_by('name')
         categories = Opening.objects.values_list('category', flat=True).distinct()
         
         return render(request, 'chess_app/opening_explorer.html', {
@@ -464,7 +531,7 @@ def verify_challenge_solution(request, challenge_id):
     })
 
 def analyze_question(question, board_fen=None, conversation_history=None):
-    # print("analyze_question method called")
+    print("analyze_question method called")
     # logger.info(f"Received question: {question}")
     # logger.info(f"Board FEN: {board_fen}")
     # logger.info(f"Conversation history: {conversation_history}")
@@ -492,7 +559,8 @@ def analyze_question(question, board_fen=None, conversation_history=None):
             "If the question is open-ended or vague, ask for further clarification to ensure you provide the most relevant and helpful response. "
             f"This is the current board state: {board_fen}"
         )
-
+        print("prompt", prompt)
+        print("board fen", board_fen)
         completion = client.chat.completions.create(
             extra_body={},
             model="google/gemini-2.0-flash-001",
@@ -775,3 +843,211 @@ def register(request):
     else:
         form = CustomUserCreationForm()
     return render(request, 'chess_app/register.html', {'form': form})
+
+# @login_required
+# def lesson_list(request):
+#     """View to display all available lessons."""
+#     lessons = OpeningLesson.objects.filter(is_active=True).order_by('order')
+#     user_progress = {
+#         progress.lesson_id: progress 
+#         for progress in UserLessonProgress.objects.filter(user=request.user)
+#     }
+    
+#     return render(request, 'chess_app/lesson_list.html', {
+#         'lessons': lessons,
+#         'user_progress': user_progress
+#     })
+
+@login_required
+def lesson_detail(request, lesson_id):
+    """View to display and interact with a specific lesson."""
+    lesson = get_object_or_404(OpeningLesson, id=lesson_id)
+    progress, created = UserLessonProgress.objects.get_or_create(
+        user=request.user,
+        lesson=lesson
+    )
+    moves = LessonMove.objects.filter(lesson=lesson).order_by('move_number')
+    reviews = {
+        review.move_id: review
+        for review in MoveReview.objects.filter(user=request.user, move__lesson=lesson)
+    }
+    # Serialize moves as JSON for the interactive lesson
+    moves_json = json.dumps([
+        {
+            'move_number': m.move_number,
+            'move_san': m.move_san,
+            'position_before': m.position_before,
+            'prompt': m.prompt,
+            'quiz_choices': m.quiz_choices,
+            'quiz_feedback': m.quiz_feedback,
+            'black_reply': m.black_reply,
+            'explanation': m.explanation,
+        }
+        for m in moves
+    ], cls=DjangoJSONEncoder)
+    template = 'chess_app/lesson_detail.html'
+    if request.GET.get('embedded') == '1':
+        template = 'chess_app/lesson_detail_embedded.html'
+    return render(request, template, {
+        'lesson': lesson,
+        'progress': progress,
+        'moves': moves_json,
+        'reviews': reviews
+    })
+
+@login_required
+@require_POST
+def verify_move(request, lesson_id):
+    """API endpoint to verify a move in a lesson."""
+    lesson = get_object_or_404(OpeningLesson, id=lesson_id)
+    progress = get_object_or_404(UserLessonProgress, user=request.user, lesson=lesson)
+    
+    data = json.loads(request.body)
+    move_number = data.get('move_number')
+    move_uci = data.get('move_uci')
+    
+    # Get the correct move for this position
+    correct_move = get_object_or_404(LessonMove, lesson=lesson, move_number=move_number)
+    
+    # Check if the move is correct
+    is_correct = move_uci == correct_move.move_uci
+    
+    # Update progress
+    progress.total_attempts += 1
+    if is_correct:
+        progress.correct_attempts += 1
+        if move_number > progress.moves_completed:
+            progress.moves_completed = move_number
+            
+        # Check if lesson is completed
+        if progress.moves_completed == LessonMove.objects.filter(lesson=lesson).count():
+            progress.completed = True
+            progress.completion_date = timezone.now()
+    
+    progress.save()
+    
+    # Update spaced repetition data
+    review, created = MoveReview.objects.get_or_create(
+        user=request.user,
+        move=correct_move,
+        defaults={'next_review': timezone.now()}
+    )
+    
+    # Calculate quality score (0-5) based on whether move was correct
+    quality = 5 if is_correct else 0
+    review.calculate_next_review(quality)
+    review.save()
+    
+    # Get alternative moves if the move was incorrect
+    alternatives = []
+    if not is_correct:
+        alternatives = [
+            {
+                'move_san': alt.move_san,
+                'explanation': alt.explanation
+            }
+            for alt in AlternativeMove.objects.filter(main_move=correct_move)
+        ]
+    
+    response = {
+        'is_correct': is_correct,
+        'correct_move': {
+            'uci': correct_move.move_uci,
+            'san': correct_move.move_san,
+            'explanation': correct_move.explanation
+        },
+        'alternatives': alternatives,
+        'progress': {
+            'moves_completed': progress.moves_completed,
+            'accuracy': progress.accuracy,
+            'completed': progress.completed
+        }
+    }
+    
+    return JsonResponse(response)
+
+@login_required
+@require_POST
+def start_test(request, lesson_id):
+    """API endpoint to start a test for a lesson."""
+    lesson = get_object_or_404(OpeningLesson, id=lesson_id)
+    
+    # Create new test result
+    test = TestResult.objects.create(
+        user=request.user,
+        lesson=lesson,
+        total_moves=LessonMove.objects.filter(lesson=lesson).count(),
+        correct_moves=0,
+        time_taken=0
+    )
+    
+    return JsonResponse({
+        'test_id': test.id,
+        'total_moves': test.total_moves
+    })
+
+@login_required
+@require_POST
+def submit_test_move(request, test_id):
+    """API endpoint to submit a move during a test."""
+    test = get_object_or_404(TestResult, id=test_id, user=request.user)
+    
+    if test.completed:
+        return JsonResponse({'error': 'Test already completed'}, status=400)
+    
+    data = json.loads(request.body)
+    move_number = data.get('move_number')
+    move_uci = data.get('move_uci')
+    time_taken = data.get('time_taken', 0)
+    
+    # Get the correct move
+    correct_move = get_object_or_404(
+        LessonMove,
+        lesson=test.lesson,
+        move_number=move_number
+    )
+    
+    # Check if move is correct
+    is_correct = move_uci == correct_move.move_uci
+    if is_correct:
+        test.correct_moves += 1
+    
+    # Update time taken
+    test.time_taken = time_taken
+    
+    # Check if test is complete
+    if move_number == test.total_moves:
+        test.completed = True
+    
+    test.save()
+    
+    return JsonResponse({
+        'is_correct': is_correct,
+        'correct_move': {
+            'uci': correct_move.move_uci,
+            'san': correct_move.move_san
+        },
+        'completed': test.completed,
+        'accuracy': test.accuracy if test.completed else None
+    })
+
+@login_required
+def get_due_reviews(request):
+    """API endpoint to get moves due for review."""
+    now = timezone.now()
+    due_reviews = MoveReview.objects.filter(
+        user=request.user,
+        next_review__lte=now
+    ).select_related('move__lesson')
+    
+    reviews = []
+    for review in due_reviews:
+        reviews.append({
+            'move_id': review.move.id,
+            'lesson_name': review.move.lesson.name,
+            'move_san': review.move.move_san,
+            'position_before': review.move.position_before,
+            'days_overdue': (now - review.next_review).days
+        })
+    
+    return JsonResponse({'reviews': reviews})

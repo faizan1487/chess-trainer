@@ -1,0 +1,365 @@
+{% extends 'chess_app/base.html' %}
+{% load static %}
+
+{% block title %}{{ lesson.name }} - Chess Lesson{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+<style>
+    .chessboard {
+        width: 100%;
+        max-width: 600px;
+        margin: 0 auto;
+        touch-action: none;
+    }
+    .move-feedback {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 5px;
+        display: none;
+    }
+    .move-feedback.correct {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+    }
+    .move-feedback.incorrect {
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+        color: #721c24;
+    }
+    .move-explanation {
+        margin-top: 10px;
+        font-style: italic;
+    }
+    .alternatives {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+    }
+    .progress-container {
+        margin: 20px 0;
+    }
+    .progress {
+        height: 20px;
+        margin-bottom: 10px;
+    }
+    .test-mode-container {
+        margin-top: 30px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        display: none;
+    }
+    .timer {
+        font-size: 1.2em;
+        font-weight: bold;
+        margin-bottom: 15px;
+    }
+    .move-hint {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #e2e3e5;
+        border-left: 4px solid #6c757d;
+        display: none;
+    }
+    .square-highlight {
+        box-shadow: 0 0 0 3px #ffc107 inset;
+        border: 2px dotted #ffc107 !important;
+        z-index: 2;
+    }
+    .square-selected {
+        background: #ffeeba !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Lesson Header -->
+            <h1>{{ lesson.name }}</h1>
+            <p class="lead">{{ lesson.description }}</p>
+            
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="d-flex justify-content-between">
+                    <span>Progress: {{ progress.moves_completed }} / {{ lesson.moves.count }} moves</span>
+                    <span>Accuracy: {{ progress.accuracy|floatformat:1 }}%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {% widthratio progress.moves_completed lesson.moves.count 100 %}%"
+                         aria-valuenow="{% widthratio progress.moves_completed lesson.moves.count 100 %}"
+                         aria-valuemin="0" aria-valuemax="100">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chessboard -->
+            <div id="game-board" class="chessboard"></div>
+            
+            <!-- Interactive Quiz Section -->
+            <div id="quiz-section" style="margin-top: 20px;">
+                <div id="move-prompt" class="mb-2"></div>
+                <div id="quiz-choices" class="mb-2"></div>
+                <div id="quiz-feedback" class="move-feedback" style="display:none;"></div>
+                <div id="move-explanation" class="move-explanation"></div>
+                <div class="progress my-3" id="quiz-progress-bar" style="height: 18px;">
+                  <div class="progress-bar bg-info" role="progressbar" style="width: 0%" id="quiz-progress"
+                       aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div id="quiz-move-history" class="mt-3"></div>
+                <button id="show-hint" class="btn btn-info mt-2">Show Hint</button>
+            </div>
+            <div id="lesson-links" class="mt-4" style="display:none;">
+                <h5>Next Steps</h5>
+                <a href="{% url 'opening_explorer_detail' lesson.opening.id %}" class="btn btn-outline-primary">Explore Chigorin in Depth</a>
+                <a href="/lessons/chigorin-model-games/" class="btn btn-outline-success">View Model Games</a>
+            </div>
+            
+            <!-- Controls -->
+            <div class="mt-3 text-center">
+                <button id="flip-board" class="btn btn-secondary">Flip Board</button>
+                <button id="hint-button" class="btn btn-info">Hint</button>
+                <button id="reset-position" class="btn btn-warning">Reset Position</button>
+                {% if progress.completed %}
+                    <button id="start-test" class="btn btn-primary">Start Test Mode</button>
+                {% endif %}
+            </div>
+            
+            <!-- Feedback Area -->
+            <div id="move-feedback" class="move-feedback">
+                <h4 id="feedback-title"></h4>
+                <p id="feedback-text"></p>
+                <div id="move-explanation" class="move-explanation"></div>
+                <div id="alternatives" class="alternatives" style="display: none;">
+                    <h5>Alternative Moves:</h5>
+                    <ul id="alternatives-list"></ul>
+                </div>
+            </div>
+            
+            <!-- Hint Area -->
+            <div id="move-hint" class="move-hint"></div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Lesson Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Lesson Information</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Opening:</strong> {{ lesson.opening.name }}</p>
+                    <p><strong>Difficulty:</strong> {{ lesson.get_difficulty_display }}</p>
+                    <p><strong>Moves to Learn:</strong> {{ lesson.moves.count }}</p>
+                    {% if progress.completed %}
+                        <p><strong>Completed:</strong> {{ progress.completion_date|date:"F j, Y" }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Move History -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Move History</h5>
+                </div>
+                <div class="card-body">
+                    <div id="move-history" style="height: 300px; overflow-y: auto;">
+                        <!-- Move history will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Test Mode Container -->
+    <div id="test-mode-container" class="test-mode-container">
+        <h3>Test Mode</h3>
+        <div class="timer" id="test-timer">Time: 00:00</div>
+        <div class="progress">
+            <div id="test-progress" class="progress-bar" role="progressbar" style="width: 0%"
+                 aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            </div>
+        </div>
+        <div id="test-feedback" class="mt-3"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+console.log("Lesson detail script loaded");
+// Pass lessonId from Django to JS
+const lessonId = {{ lesson.id }};
+// Interactive lesson moves (with quiz fields)
+const moves = {{ moves|safe }};
+let currentMove = 0;
+let board = null;
+let game = new Chess(moves[0].position_before);
+let missedMoves = [];
+const positiveMessages = [
+    "Great job!", "Excellent!", "You're learning fast!", "Keep it up!", "Nice move!"
+];
+function getRandomPositive() {
+    return positiveMessages[Math.floor(Math.random() * positiveMessages.length)];
+}
+function updateQuizProgress() {
+    const percent = ((currentMove + 1) / moves.length) * 100;
+    $('#quiz-progress').css('width', percent + '%').attr('aria-valuenow', percent);
+}
+function updateMoveHistory() {
+    let history = '';
+    for (let i = 0; i <= currentMove; i++) {
+        history += `<span>${moves[i].move_san} </span>`;
+        if (moves[i].black_reply) history += `<span>${moves[i].black_reply} </span>`;
+    }
+    $('#quiz-move-history').html(history);
+}
+let selectedSquare = null;
+let validDestinations = [];
+function highlightSquares(squares) {
+    $('[data-square]').removeClass('square-highlight');
+    squares.forEach(sq => {
+        $(`[data-square='${sq}']`).addClass('square-highlight');
+    });
+}
+function clearHighlights() {
+    $('[data-square]').removeClass('square-highlight square-selected');
+}
+function enableClickToMove() {
+    $('#game-board').off('click', '[data-square]');
+    $('#game-board').on('click', '[data-square]', function() {
+        const square = $(this).attr('data-square');
+        console.log("Square clicked:", square);
+        if (!square) return;
+        if (!selectedSquare) {
+            // Select piece if it matches the side to move
+            const piece = game.get(square);
+            console.log("Selected piece:", piece, "on square:", square);
+            if (piece && ((game.turn() === 'w' && piece.color === 'w') || (game.turn() === 'b' && piece.color === 'b'))) {
+                selectedSquare = square;
+                $(this).addClass('square-selected');
+                // Highlight valid moves
+                validDestinations = game.moves({ square: square, verbose: true }).map(m => m.to);
+                highlightSquares(validDestinations);
+                console.log("Valid destinations:", validDestinations);
+            }
+        } else {
+            // If clicking a valid destination, try the move
+            if (validDestinations.includes(square)) {
+                const move = game.move({ from: selectedSquare, to: square, promotion: 'q' });
+                console.log("Move attempted:", { from: selectedSquare, to: square }, "Result:", move);
+                if (move) {
+                    board.position(game.fen());
+                    clearHighlights();
+                    selectedSquare = null;
+                    validDestinations = [];
+                    // Check if move matches lesson step
+                    handleUserMove(move.from + move.to);
+                    return;
+                }
+            }
+            // Deselect if clicking elsewhere
+            clearHighlights();
+            selectedSquare = null;
+            validDestinations = [];
+        }
+    });
+}
+function handleUserMove(userMoveUci) {
+    const moveObj = moves[currentMove];
+    console.log("User move:", userMoveUci, "Expected:", moveObj.move_uci);
+    if (userMoveUci === moveObj.move_uci) {
+        $('#quiz-feedback').text(getRandomPositive() + ' Correct!').removeClass('incorrect').addClass('correct').show();
+        // Auto-play Black's reply if available
+        if (moveObj.black_reply) {
+            setTimeout(() => {
+                game.move(moveObj.black_reply);
+                board.position(game.fen());
+                $('#move-explanation').text(moveObj.explanation).show();
+                setTimeout(() => {
+                    if (currentMove < moves.length - 1) {
+                        currentMove++;
+                        renderMove();
+                    } else {
+                        $('#move-prompt').text('Lesson complete!').show();
+                        $('#lesson-links').show();
+                    }
+                }, 1200);
+            }, 800);
+        } else {
+            setTimeout(() => {
+                if (currentMove < moves.length - 1) {
+                    currentMove++;
+                    renderMove();
+                } else {
+                    $('#move-prompt').text('Lesson complete!').show();
+                    $('#lesson-links').show();
+                }
+            }, 800);
+        }
+    } else {
+        $('#quiz-feedback').text('Try again!').removeClass('correct').addClass('incorrect').show();
+        // Revert move
+        game.undo();
+        board.position(game.fen());
+    }
+}
+function renderMove() {
+    const move = moves[currentMove];
+    $('#move-prompt').text(move.prompt || `Your move (${move.move_san})`);
+    $('#quiz-feedback').hide();
+    $('#move-explanation').hide();
+    $('#quiz-choices').empty(); // Remove quiz buttons
+    $('#lesson-links').hide();
+    board.position(move.position_before);
+    game = new Chess(move.position_before);
+    updateQuizProgress();
+    updateMoveHistory();
+    clearHighlights();
+}
+$(document).ready(function() {
+    console.log("Document ready, initializing board...");
+    board = Chessboard('game-board', {
+        position: moves[0].position_before,
+        draggable: false,
+        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+    });
+    console.log("Board initialized");
+    renderMove();
+    enableClickToMove();
+    console.log("Click-to-move enabled");
+    // Handle quiz choice click
+    $('#quiz-choices').on('click', '.quiz-choice', function() {
+        handleQuizChoice($(this).data('move'));
+    });
+    // Hint button
+    $('#show-hint').click(function() {
+        const move = moves[currentMove];
+        $('#move-explanation').text(move.explanation).show();
+    });
+    // Review mistakes logic
+    $('#quiz-section').on('click', '#review-mistakes', function() {
+        if (missedMoves.length > 0) {
+            currentMove = missedMoves.shift();
+            renderMove();
+        }
+    });
+    // Reset position
+    $('#reset-position').click(function() {
+        currentMove = 0;
+        missedMoves = [];
+        game = new Chess(moves[0].position_before);
+        renderMove();
+        updateQuizProgress();
+    });
+    // Flip board
+    $('#flip-board').click(function() {
+        board.flip();
+    });
+});
+</script>
+{% endblock %} 
