@@ -22,7 +22,7 @@ from collections import defaultdict
 from django.core.serializers.json import DjangoJSONEncoder
 
 from .models import (
-    Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge, UserLessonProgress, LessonMove, MoveReview, AlternativeMove, TestResult
+    Opening, Game, Move, UserProfile, UserProgress, Challenge, UserChallenge
 )
 from .services import (
     StockfishEngine, ChessNLP, FeedbackGenerator, OpeningExplorer
@@ -1051,3 +1051,6 @@ def get_due_reviews(request):
         })
     
     return JsonResponse({'reviews': reviews})
+
+def training(request):
+    return render(request, 'chess_app/training.html')

@@ -31,10 +31,10 @@ urlpatterns = [
          views.verify_challenge_solution, name='verify_challenge_solution'),
     
     # Lesson System URLs
-    path('lessons/', views.lesson_list, name='lesson_list'),
     path('lesson/<int:lesson_id>/', views.lesson_detail, name='lesson_detail'),
     path('lesson/<int:lesson_id>/verify-move/', views.verify_move, name='verify_move'),
     path('lesson/<int:lesson_id>/start-test/', views.start_test, name='start_test'),
     path('test/<int:test_id>/submit-move/', views.submit_test_move, name='submit_test_move'),
     path('reviews/due/', views.get_due_reviews, name='get_due_reviews'),
+    path('training/', views.training, name='training'),
 ]

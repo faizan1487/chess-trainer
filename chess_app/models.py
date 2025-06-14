@@ -7,7 +7,7 @@ class UserProfile(models.Model):
     elo_rating = models.IntegerField(default=1200)
     games_played = models.IntegerField(default=0)
     games_won = models.IntegerField(default=0)
-
+    
     def __str__(self):
         return self.user.username
 
@@ -20,7 +20,7 @@ class Opening(models.Model):
     difficulty = models.IntegerField(
         default=1
     )  # 1-5 scale
-
+    
     # New fields for enhanced Opening model
     is_popular = models.BooleanField(default=False)
     for_white = models.BooleanField(
@@ -36,7 +36,7 @@ class Opening(models.Model):
         'self', on_delete=models.SET_NULL, blank=True, null=True,
         related_name='variations'
     )
-
+    
     def __str__(self):
         return self.name
 
@@ -61,13 +61,13 @@ class OpeningPosition(models.Model):
     is_critical = models.BooleanField(
         default=False
     )  # Whether this is a key position
-
+    
     def __str__(self):
         return (
             f"{self.opening.name} - Move {self.move_number}: "
             f"{self.move_san or 'Initial'}"
         )
-
+    
     class Meta:
         ordering = ['opening', 'move_number']
         unique_together = ['opening', 'fen_position']
@@ -79,7 +79,7 @@ class Game(models.Model):
         ('COMPLETED', 'Completed'),
         ('ABANDONED', 'Abandoned'),
     ]
-
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     opening = models.ForeignKey(Opening, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -92,7 +92,7 @@ class Game(models.Model):
         default='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
     )
     user_color = models.CharField(max_length=5, default='white')
-
+    
     # New fields
     ai_strength = models.IntegerField(
         default=15
@@ -103,7 +103,7 @@ class Game(models.Model):
     result = models.CharField(
         max_length=10, blank=True, null=True
     )  # "1-0", "0-1", "1/2-1/2"
-
+    
     def __str__(self):
         return (
             f"{self.user.username} - {self.opening.name} "
@@ -121,7 +121,7 @@ class Move(models.Model):
         ('blunder', 'Blunder'),
         ('normal', 'Normal')
     ]
-
+    
     game = models.ForeignKey(
         Game, on_delete=models.CASCADE, related_name='moves'
     )
@@ -132,7 +132,7 @@ class Move(models.Model):
     position_after = models.CharField(max_length=100)
     player = models.CharField(max_length=10)  # 'user' or 'ai'
     eval_score = models.FloatField(null=True, blank=True)
-
+    
     # Updated fields
     is_mistake = models.BooleanField(default=False)
     quality = models.CharField(
@@ -141,10 +141,10 @@ class Move(models.Model):
     feedback = models.TextField(blank=True, null=True)
     improvement_suggestion = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    
     class Meta:
         ordering = ['move_number']
-
+        
     def __str__(self):
         return f"{self.game} - Move {self.move_number}: {self.move_san}"
 
@@ -158,7 +158,7 @@ class UserProgress(models.Model):
     games_played = models.IntegerField(default=0)
     mastery_level = models.IntegerField(default=0)  # 0-100 scale
     last_played = models.DateTimeField(auto_now=True)
-
+    
     # Statistics
     avg_accuracy = models.FloatField(
         default=0.0
@@ -169,10 +169,10 @@ class UserProgress(models.Model):
     common_mistakes = models.TextField(
         blank=True, null=True
     )  # JSON field to store common mistake positions
-
+    
     class Meta:
         unique_together = ['user', 'opening']
-
+        
     def __str__(self):
         return (
             f"{self.user.username} - {self.opening.name} "
@@ -191,7 +191,7 @@ class Challenge(models.Model):
         (4, 'Advanced'),
         (5, 'Expert')
     ]
-
+    
     title = models.CharField(max_length=100)
     description = models.TextField()
     fen_position = models.CharField(max_length=100)
@@ -201,7 +201,7 @@ class Challenge(models.Model):
     )
     difficulty = models.IntegerField(choices=DIFFICULTY_CHOICES, default=1)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    
     def __str__(self):
         return self.title
 
@@ -215,10 +215,10 @@ class UserChallenge(models.Model):
     is_solved = models.BooleanField(default=False)
     attempts = models.IntegerField(default=0)
     solved_date = models.DateTimeField(null=True, blank=True)
-
+    
     class Meta:
         unique_together = ['user', 'challenge']
-
+        
     def __str__(self):
         status = "Solved" if self.is_solved else "Unsolved"
         return f"{self.user.username} - {self.challenge.title} ({status})"
