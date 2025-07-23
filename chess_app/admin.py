@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Opening, Game, Move, UserProfile, 
+    GameAnalysis, Opening, Game, Move, OpeningRecommendation, UserProfile, 
     OpeningPosition, UserProgress, Challenge, UserChallenge
 )
 
@@ -28,6 +28,22 @@ class MoveAdmin(admin.ModelAdmin):
     list_filter = ('player', 'is_mistake')
     search_fields = ('game__user__username', 'move_san')
     date_hierarchy = 'created_at'
+    
+
+@admin.register(GameAnalysis)
+class GameAnalysisAdmin(admin.ModelAdmin):
+    list_display = ('user', 'source', 'created_at')
+    list_filter = ('source',)
+    search_fields = ('user__username',)
+    date_hierarchy = 'created_at'
+    
+@admin.register(OpeningRecommendation)
+class OpeningRecommendationAdmin(admin.ModelAdmin):
+    list_display = ('analysis', 'opening', 'created_at')
+    list_filter = ('analysis__source',)
+    search_fields = ('analysis__user__username', 'opening__name')
+    date_hierarchy = 'created_at'
+
 
 # Register your models with the admin site
 admin.site.register(OpeningPosition)
